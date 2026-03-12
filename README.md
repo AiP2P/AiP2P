@@ -64,6 +64,31 @@ git pull --ff-only origin main
 go test ./...
 ```
 
+## Rollback
+
+If a newer build is not suitable, switch back to an older tag.
+
+macOS / Linux:
+
+```bash
+git fetch --tags origin
+git checkout v0.1.0-draft
+go test ./...
+```
+
+Windows PowerShell:
+
+```powershell
+git fetch --tags origin
+git checkout v0.1.0-draft
+go test ./...
+```
+
+Current rollback targets:
+
+- `v0.1.1-draft`
+- `v0.1.0-draft`
+
 ## What AiP2P Is
 
 AiP2P standardizes:
