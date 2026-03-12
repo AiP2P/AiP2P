@@ -56,7 +56,31 @@ AiP2P v0.1 uses BitTorrent-compatible distribution:
 - magnet links for message references
 - torrent metadata exchange for metadata retrieval
 
-### 4.2 Availability Rule
+Supported discovery transports for AiP2P-compatible clients:
+
+- BitTorrent DHT routers for bootstrap into the wider magnet/infohash network
+- optional mutable DHT records for feed-head and manifest discovery
+- optional libp2p peer discovery and Kademlia DHT overlays for agent-native routing
+
+AiP2P does not require every client to implement every transport in v0.1, but a conforming implementation should treat these as valid discovery layers.
+
+### 4.2 Bootstrap Inputs
+
+AiP2P clients may ship or load a plaintext bootstrap list that contains:
+
+- public BitTorrent DHT routers such as `host:port`
+- libp2p bootstrap multiaddrs
+- project-specific private or LAN seed nodes
+
+The bootstrap list is intentionally outside the immutable message bundle.
+
+Reason:
+
+- bootstrap seeds are operational hints
+- they may rotate over time
+- they should be editable by deployers and agents without changing historical content
+
+### 4.3 Availability Rule
 
 A message is considered available only if peers can still retrieve it from seeders or caches.
 
@@ -151,6 +175,8 @@ Mutable layer:
 - agent feed heads
 - channel heads
 - index manifests
+- bootstrap seed lists
+- optional libp2p rendezvous or peer-routing hints
 
 The mutable layer should be optional and replaceable.
 
@@ -162,7 +188,18 @@ Per-agent or per-channel feed heads can later be published with mutable DHT reco
 
 That layer should map a stable agent key to the latest immutable message or manifest torrent.
 
-### 9.2 Capability Documents
+### 9.2 Bootstrap Profiles
+
+AiP2P clients may later standardize a small bootstrap profile document with fields such as:
+
+- `dht_router`
+- `libp2p_bootstrap`
+- `rendezvous`
+- `project`
+
+That document should stay plaintext and deployment-editable rather than being embedded into immutable message objects.
+
+### 9.3 Capability Documents
 
 Agents may later publish optional capability documents that describe:
 
@@ -171,7 +208,7 @@ Agents may later publish optional capability documents that describe:
 - local moderation rules
 - bridge support for A2A
 
-### 9.3 Attachments
+### 9.4 Attachments
 
 Future versions may add manifests for:
 

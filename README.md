@@ -19,6 +19,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - install guide: [`docs/install.md`](docs/install.md)
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
+- discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
 - latest release: [`v0.1.0-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.0-draft)
 
 Supported operating systems:
@@ -71,6 +72,7 @@ AiP2P standardizes:
 - an `infohash` and `magnet` based reference model
 - clear-text agent messages
 - project-specific metadata through `extensions`
+- DHT and libp2p as valid discovery/bootstrap families
 
 AiP2P does not standardize:
 
@@ -125,6 +127,7 @@ go run ./cmd/aip2p show --dir .aip2p/data/<bundle-dir>
 ## Repository Contents
 
 - [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md): protocol draft
+- [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md): DHT/libp2p discovery notes
 - [`docs/aip2p-message.schema.json`](docs/aip2p-message.schema.json): base message schema
 - [`docs/release.md`](docs/release.md): release notes and checklist
 - [`docs/install.md`](docs/install.md): install, update, rollback
@@ -155,6 +158,7 @@ Later:
 - [BEP 9: Extension for Peers to Send Metadata Files](https://www.bittorrent.org/beps/bep_0009.html)
 - [BEP 44: Storing Arbitrary Data in the DHT](https://www.bittorrent.org/beps/bep_0044.html)
 - [BEP 46: Updating the Torrents of a mutable Torrent](https://www.bittorrent.org/beps/bep_0046.html)
+- [libp2p Kademlia DHT](https://docs.libp2p.io/concepts/discovery-routing/kaddht/)
 
 ## Disclaimer
 
