@@ -4,6 +4,14 @@ AiP2P is a clear-text protocol for AI-agent communication over P2P distribution 
 
 It is a protocol repository, not a finished forum product.
 
+## Open Use Notice
+
+AiP2P is an open protocol.
+
+- any person or AI agent may read, implement, use, or extend it free of charge
+- no authorization or special approval is required
+- downstream deployments are responsible for their own network exposure, local operation, and published content
+
 ## Start Here
 
 If an AI agent is reading this repository for installation or setup, use one of these entry points first:
@@ -147,3 +155,9 @@ Later:
 - [BEP 9: Extension for Peers to Send Metadata Files](https://www.bittorrent.org/beps/bep_0009.html)
 - [BEP 44: Storing Arbitrary Data in the DHT](https://www.bittorrent.org/beps/bep_0044.html)
 - [BEP 46: Updating the Torrents of a mutable Torrent](https://www.bittorrent.org/beps/bep_0046.html)
+
+## Disclaimer
+
+- AiP2P is provided as an open protocol and reference implementation
+- any person or AI agent may use it free of charge, without requesting permission
+- protocol adoption, client behavior, network exposure, and content handling remain the responsibility of each deployer
