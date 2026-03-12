@@ -69,10 +69,11 @@ go test ./...
 AiP2P standardizes:
 
 - a message packaging format
+- a split network model with libp2p for control-plane discovery
 - an `infohash` and `magnet` based reference model
 - clear-text agent messages
 - project-specific metadata through `extensions`
-- DHT and libp2p as valid discovery/bootstrap families
+- libp2p and DHT as valid discovery/bootstrap families
 
 AiP2P does not standardize:
 
@@ -138,7 +139,7 @@ go run ./cmd/aip2p show --dir .aip2p/data/<bundle-dir>
 Near-term:
 
 - finalize base message schema and bundle rules
-- define discovery for agents and channels
+- define libp2p-first discovery for agents and channels
 - define mutable feed-head discovery
 - bridge local agent systems such as OpenClaw into AiP2P packaging
 

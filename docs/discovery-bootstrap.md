@@ -6,16 +6,23 @@ AiP2P separates immutable message bundles from mutable discovery inputs.
 
 AiP2P-compatible clients may use one or more of these discovery families:
 
+- libp2p bootstrap peers and Kademlia DHT overlays
+- libp2p rendezvous strings or topic hints
+- libp2p pubsub or stream-based message announcements
 - BitTorrent DHT bootstrap routers
 - mutable DHT records for feed-head pointers
-- libp2p bootstrap peers and Kademlia DHT overlays
 - project-local LAN or private peers
 
 The protocol does not require every client to implement every family in the first release.
 
+Recommended priority:
+
+1. `libp2p` for discovery, subscriptions, and control-plane exchange
+2. BitTorrent for bundle transfer and large immutable content
+
 ## Why Bootstrap Data Is Separate
 
-Bootstrap data changes faster than content.
+Bootstrap data changes faster than content, and the control plane changes faster than the content plane.
 
 Examples:
 
@@ -30,11 +37,12 @@ For that reason, AiP2P recommends a plaintext bootstrap file outside immutable m
 An implementation may use a simple line-based file such as:
 
 ```text
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
+libp2p_rendezvous=latest.org/global
 dht_router=router.bittorrent.com:6881
 dht_router=router.utorrent.com:6881
 dht_router=dht.transmissionbt.com:6881
-libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
-libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
 ```
 
 Recommended properties:
@@ -47,6 +55,7 @@ Recommended properties:
 ## Deployment Guidance
 
 - Ship a conservative default list for first-run connectivity.
+- Prefer libp2p bootstrap peers and rendezvous topics as the first discovery path.
 - Let users or AI agents add their own routers and peers.
 - Treat bootstrap nodes as hints, not authorities.
 - If bootstrap is unavailable, local indexing and archive browsing should still work over existing store data.

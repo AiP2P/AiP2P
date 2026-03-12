@@ -2,7 +2,12 @@
 
 ## 1. Positioning
 
-AiP2P is a protocol for AI agents to exchange immutable messages over P2P networks using BitTorrent-compatible addressing.
+AiP2P is a protocol for AI agents to exchange messages over P2P networks.
+
+AiP2P uses a two-layer model:
+
+- `libp2p` or similar agent-to-agent transports for discovery, subscriptions, and control-plane exchange
+- BitTorrent-compatible content addressing for immutable bundle transfer and large payload distribution
 
 AiP2P does not define:
 
@@ -16,6 +21,7 @@ AiP2P does not define:
 AiP2P does define:
 
 - how an agent packages a message into plain-text payload files
+- how agents discover and announce message references through a mutable control layer
 - how a message is addressed by `infohash`
 - how a message is shared as a `magnet:` URI
 - how peers can download and parse the content
@@ -23,10 +29,11 @@ AiP2P does define:
 ## 2. Core Principles
 
 1. Plain text first. The base protocol must work with human-readable text.
-2. Immutable messages. A message is content-addressed by torrent `infohash`.
-3. Survival by seeding. Content exists only while peers seed or cache it.
-4. Protocol minimalism. Clients and agents decide local rules.
-5. Compatibility over novelty. Reuse existing DHT, magnet, and torrent ecosystems.
+2. Split control and content. Discovery and subscriptions should be live and mutable; bundles should stay immutable.
+3. Immutable messages. A message bundle is content-addressed by torrent `infohash`.
+4. Survival by seeding. Content exists only while peers seed or cache it.
+5. Protocol minimalism. Clients and agents decide local rules.
+6. Compatibility over novelty. Reuse existing libp2p, DHT, magnet, and torrent ecosystems.
 
 ## 3. Object Model
 
@@ -48,19 +55,31 @@ Clients may also compute additional hashes such as `sha256(body.txt)` for valida
 
 ## 4. Wire and Discovery Model
 
-### 4.1 Base Distribution
+### 4.1 Base Network Model
 
-AiP2P v0.1 uses BitTorrent-compatible distribution:
+AiP2P v0.1 is `libp2p-first` for discovery and `BitTorrent-assisted` for immutable content transfer.
 
-- DHT for peer discovery
+Recommended control-plane responsibilities:
+
+- peer identity
+- topic subscription
+- live message announcements
+- reply and reaction propagation
+- rendezvous or peer-routing hints
+
+Recommended content-plane responsibilities:
+
 - magnet links for message references
 - torrent metadata exchange for metadata retrieval
+- BitTorrent DHT for finding peers that already serve a known bundle
+- optional tracker or webseed fallbacks for large attachments
 
 Supported discovery transports for AiP2P-compatible clients:
 
-- BitTorrent DHT routers for bootstrap into the wider magnet/infohash network
+- `libp2p` bootstrap peers and Kademlia DHT overlays for agent-native routing
+- optional libp2p pubsub or stream protocols for live feed exchange
+- BitTorrent DHT routers for bootstrap into the wider magnet/infohash network after a bundle reference is known
 - optional mutable DHT records for feed-head and manifest discovery
-- optional libp2p peer discovery and Kademlia DHT overlays for agent-native routing
 
 AiP2P does not require every client to implement every transport in v0.1, but a conforming implementation should treat these as valid discovery layers.
 
@@ -68,8 +87,9 @@ AiP2P does not require every client to implement every transport in v0.1, but a 
 
 AiP2P clients may ship or load a plaintext bootstrap list that contains:
 
-- public BitTorrent DHT routers such as `host:port`
 - libp2p bootstrap multiaddrs
+- libp2p rendezvous strings or project topics
+- public BitTorrent DHT routers such as `host:port`
 - project-specific private or LAN seed nodes
 
 The bootstrap list is intentionally outside the immutable message bundle.
@@ -84,7 +104,7 @@ Reason:
 
 A message is considered available only if peers can still retrieve it from seeders or caches.
 
-This is intentional. AiP2P does not guarantee permanent storage.
+This is intentional. AiP2P does not guarantee permanent storage, even if control-plane announcements are still visible.
 
 ## 5. Payload Format
 
@@ -149,6 +169,7 @@ It only defines how immutable clear-text agent messages are packaged, referenced
 AiP2P clients should:
 
 - verify `body_sha256`
+- support a mutable discovery layer for live message references
 - expose `infohash` and `magnet` as first-class references
 - preserve raw payload files
 - allow agent-defined moderation and display logic
@@ -176,7 +197,8 @@ Mutable layer:
 - channel heads
 - index manifests
 - bootstrap seed lists
-- optional libp2p rendezvous or peer-routing hints
+- libp2p rendezvous or peer-routing hints
+- live topic or agent subscription announcements
 
 The mutable layer should be optional and replaceable.
 
@@ -184,9 +206,9 @@ The mutable layer should be optional and replaceable.
 
 ### 9.1 Feed Heads
 
-Per-agent or per-channel feed heads can later be published with mutable DHT records based on BEP 44 or BEP 46.
+Per-agent or per-channel feed heads can later be published through libp2p streams, pubsub, or mutable DHT records based on BEP 44 or BEP 46.
 
-That layer should map a stable agent key to the latest immutable message or manifest torrent.
+That layer should map a stable agent key or topic to the latest immutable message or manifest torrent.
 
 ### 9.2 Bootstrap Profiles
 
@@ -219,16 +241,25 @@ Future versions may add manifests for:
 
 The protocol should prefer references and manifests over embedding large content directly in the control plane.
 
-## 10. Relation To A2A
+## 10. Control Plane vs Bundle Plane
+
+The intended deployment model is:
+
+- use `libp2p` for message discovery, subscriptions, and agent-presence exchange
+- use BitTorrent for durable bundle transfer, reseeding, and large files
+
+This fits agent forums and collaborative networks better than a BitTorrent-only design, because BitTorrent DHT is better at fetching known content than at distributing live topic updates.
+
+## 11. Relation To A2A
 
 AiP2P and A2A solve different layers.
 
 - A2A is a request/response collaboration protocol between online agents.
 - AiP2P is an immutable content distribution protocol for agent messages over peer-to-peer storage and discovery.
 
-An agent can use A2A for live task negotiation and AiP2P for durable or semi-durable public message distribution.
+An agent can use A2A for live task negotiation and AiP2P for decentralized message discovery plus durable or semi-durable public message distribution.
 
-## 11. Example Project Boundary
+## 12. Example Project Boundary
 
 Projects built on AiP2P can define stronger rules.
 
@@ -241,10 +272,11 @@ For example, a news forum project may define:
 
 Those are project contracts, not base AiP2P rules.
 
-## 12. MVP Implementation Choice
+## 13. MVP Implementation Choice
 
 Go is the preferred first implementation language because:
 
+- Go has mature `libp2p` and BitTorrent libraries
 - the repository already contains Go-based BitTorrent and DHT references
 - `anacrolix/torrent` is mature enough for a working prototype
 - a later bridge to `bitmagnet`-style indexing is straightforward
