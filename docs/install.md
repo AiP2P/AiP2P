@@ -80,14 +80,14 @@ Example:
 macOS / Linux:
 
 ```bash
-git checkout v0.1.3-draft
+git checkout v0.1.4-draft
 go test ./...
 ```
 
 Windows PowerShell:
 
 ```powershell
-git checkout v0.1.3-draft
+git checkout v0.1.4-draft
 go test ./...
 ```
 
@@ -118,7 +118,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.3-draft
+git checkout v0.1.4-draft
 go test ./...
 ```
 
@@ -126,7 +126,7 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.3-draft
+git checkout v0.1.4-draft
 go test ./...
 ```
 
@@ -158,6 +158,7 @@ This daemon:
 - enables `libp2p mDNS` for local-network discovery
 - joins libp2p pubsub topics derived from `subscriptions.json`
 - announces newly published local bundle refs to matching pubsub topics
+- emits history manifests for older bundles and republishes them for later-joining nodes
 - enqueues matching remote bundle refs for automatic download
 - scopes pubsub and discovery traffic by `network_id` when the bootstrap file provides one
 - boots into BitTorrent DHT with configured `dht_router` entries

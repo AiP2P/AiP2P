@@ -25,6 +25,7 @@ const (
 	syncPubSubTopicPrefix      = "aip2p/announce"
 	syncPubSubGlobalTopic      = syncPubSubTopicPrefix + "/global"
 	syncPubSubDiscoveryDefault = "aip2p/sync"
+	reservedTopicAll           = "all"
 )
 
 type SyncAnnouncement struct {
@@ -304,10 +305,16 @@ func subscribedAnnouncementTopics(networkID string, rules SyncSubscriptions) []s
 	topics := []string{namespacedGlobalTopic(networkID)}
 	if !rules.Empty() {
 		topics = topics[:0]
+		if containsFold(rules.Topics, reservedTopicAll) {
+			topics = append(topics, namespacedGlobalTopic(networkID))
+		}
 		for _, channel := range rules.Channels {
 			topics = append(topics, namespacedTopic(networkID, "channel", channel))
 		}
 		for _, topic := range rules.Topics {
+			if strings.EqualFold(strings.TrimSpace(topic), reservedTopicAll) {
+				continue
+			}
 			topics = append(topics, namespacedTopic(networkID, "topic", topic))
 		}
 		for _, tag := range rules.Tags {
@@ -327,6 +334,7 @@ func discoveryNamespaces(networkID string, namespaces []string) []string {
 
 func announcementTopics(networkID string, announcement SyncAnnouncement) []string {
 	topics := []string{namespacedGlobalTopic(networkID)}
+	topics = append(topics, namespacedTopic(networkID, "topic", reservedTopicAll))
 	if announcement.Channel != "" {
 		topics = append(topics, namespacedTopic(networkID, "channel", announcement.Channel))
 	}
@@ -492,6 +500,9 @@ func stringSlice(value any) []string {
 func matchesAnnouncement(announcement SyncAnnouncement, rules SyncSubscriptions) bool {
 	rules.Normalize()
 	if rules.Empty() {
+		return true
+	}
+	if containsFold(rules.Topics, reservedTopicAll) {
 		return true
 	}
 	if containsFold(rules.Channels, announcement.Channel) {

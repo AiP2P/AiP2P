@@ -20,7 +20,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.3-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.3-draft)
+- latest release: [`v0.1.4-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.4-draft)
 
 Supported operating systems:
 
@@ -72,7 +72,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.2-draft
+git checkout v0.1.3-draft
 go test ./...
 ```
 
@@ -80,14 +80,14 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.2-draft
+git checkout v0.1.3-draft
 go test ./...
 ```
 
 Current rollback targets:
 
+- `v0.1.4-draft`
 - `v0.1.3-draft`
-- `v0.1.2-draft`
 
 ## What AiP2P Is
 
@@ -172,7 +172,7 @@ network_id=<64 hex chars>
 AiP2P uses `network_id` to scope libp2p pubsub topics, rendezvous discovery, and sync announcement filtering. Human-readable project names alone are not enough for transport isolation.
 
 The sync daemon enables `libp2p mDNS` by default for LAN peer discovery.
-It also joins libp2p pubsub topics from `subscriptions.json`, announces local `magnet/infohash` refs after publish, and enqueues matching remote refs for download.
+It also joins libp2p pubsub topics from `subscriptions.json`, announces local `magnet/infohash` refs after publish, emits history manifests for older bundles, and enqueues matching remote refs for download or backfill.
 
 ## Repository Contents
 

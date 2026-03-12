@@ -136,7 +136,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
 			logf("seed local torrents: %v", err)
 		}
-		if err := runtime.processQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
+		if err := runtime.reconcileQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
 			return err
 		}
 		if runtime.queueRefs() == 0 {
@@ -154,7 +154,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
 			logf("seed local torrents: %v", err)
 		}
-		if err := runtime.processQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
+		if err := runtime.reconcileQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
 			return err
 		}
 		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
@@ -266,9 +266,32 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 	return nil
 }
 
+func (r *syncRuntime) reconcileQueue(ctx context.Context, direct []string, timeout time.Duration, logf func(string, ...any)) error {
+	for round := 0; round < 3; round++ {
+		if err := r.processQueue(ctx, direct, timeout, logf); err != nil {
+			return err
+		}
+		added, err := r.enqueueHistoryFromLocalManifests(logf)
+		if err != nil {
+			return err
+		}
+		if added == 0 {
+			return nil
+		}
+		direct = nil
+	}
+	return nil
+}
+
 func (r *syncRuntime) announceLocalBundles(ctx context.Context, logf func(string, ...any)) error {
 	if r.pubsub == nil {
 		return nil
+	}
+	if err := ensureHistoryManifests(r.store, r.netCfg, r.torrentClient.ListenAddrs()); err != nil {
+		return err
+	}
+	if err := r.seedLocalTorrents(logf); err != nil {
+		return err
 	}
 	announcements, err := localAnnouncements(r.store)
 	if err != nil {
@@ -282,19 +305,24 @@ func (r *syncRuntime) announceLocalBundles(ctx context.Context, logf func(string
 			announcement.NetworkID = r.netCfg.NetworkID
 		}
 		announcement.Magnet = withPeerHints(announcement.Magnet, r.torrentClient.ListenAddrs())
-		r.mu.Lock()
-		_, seen := r.announced[announcement.InfoHash]
-		if !seen {
-			r.announced[announcement.InfoHash] = struct{}{}
-		}
-		r.mu.Unlock()
-		if seen {
-			continue
+		alwaysPublish := strings.EqualFold(announcement.Kind, historyManifestKind)
+		if !alwaysPublish {
+			r.mu.Lock()
+			_, seen := r.announced[announcement.InfoHash]
+			if !seen {
+				r.announced[announcement.InfoHash] = struct{}{}
+			}
+			r.mu.Unlock()
+			if seen {
+				continue
+			}
 		}
 		if err := r.pubsub.PublishAnnouncement(ctx, announcement); err != nil {
-			r.mu.Lock()
-			delete(r.announced, announcement.InfoHash)
-			r.mu.Unlock()
+			if !alwaysPublish {
+				r.mu.Lock()
+				delete(r.announced, announcement.InfoHash)
+				r.mu.Unlock()
+			}
 			return err
 		}
 		if logf != nil {
@@ -357,6 +385,17 @@ func (r *syncRuntime) handleAnnouncement(announcement SyncAnnouncement) (bool, e
 		return false, err
 	}
 	return enqueueSyncRef(r.queuePath, ref)
+}
+
+func (r *syncRuntime) enqueueHistoryFromLocalManifests(logf func(string, ...any)) (int, error) {
+	added, err := enqueueHistoryManifestRefs(r.store, r.queuePath, r.subscriptions, r.netCfg.NetworkID)
+	if err != nil {
+		return 0, err
+	}
+	if added > 0 && logf != nil {
+		logf("history manifest queued %d refs", added)
+	}
+	return added, nil
 }
 
 func torrentStatus(client *torrent.Client, configuredRouters int) SyncBitTorrentStatus {

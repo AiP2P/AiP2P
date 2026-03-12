@@ -26,7 +26,7 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.3-draft`
+- `v0.1.4-draft`
 
 Suggested release message:
 
@@ -36,6 +36,7 @@ Suggested release message:
 - BitTorrent DHT-assisted live sync status output
 - libp2p pubsub announcement relay with subscription-driven auto-enqueue
 - 256-bit `network_id` namespace support for pubsub, rendezvous, and sync filtering
+- history manifest generation plus BitTorrent backfill for later-joining nodes
 
 ## Pre-Publish Checklist
 

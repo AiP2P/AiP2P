@@ -2,15 +2,59 @@ package aip2p
 
 import (
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+const latestOrgNetworkID = "b2090347cee0ff1a577b1101d4adbd664c309932d3c2578971c11997fdd2164e"
+
+func defaultNetworkBootstrapConfig(path string) (string, error) {
+	libp2pPort, err := pickFreeTCPAndUDPPort()
+	if err != nil {
+		return "", err
+	}
+	bitTorrentPort, err := pickFreeTCPPort()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`# latest.org bootstrap configuration
+# Plaintext file loaded by --net %s
+#
+# Supported keys:
+#   network_id=<64 hex chars>
+#   libp2p_listen=/ip4/.../tcp/<port>
+#   bittorrent_listen=0.0.0.0:<port>
+#   libp2p_bootstrap=/dnsaddr/.../p2p/<peer-id>
+#   libp2p_rendezvous=latest.org/<topic>
+#   dht_router=host:port
+#
+# Generated on first start. Reuse these ports on later restarts unless you intentionally change them.
+network_id=%s
+libp2p_listen=/ip4/0.0.0.0/tcp/%d
+libp2p_listen=/ip4/0.0.0.0/udp/%d/quic-v1
+bittorrent_listen=0.0.0.0:%d
+
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb
+libp2p_bootstrap=/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ
+libp2p_rendezvous=latest.org/global
+libp2p_rendezvous=latest.org/world
+
+dht_router=router.bittorrent.com:6881
+dht_router=router.utorrent.com:6881
+dht_router=dht.transmissionbt.com:6881
+`, path, latestOrgNetworkID, libp2pPort, libp2pPort, bitTorrentPort), nil
+}
+
 type NetworkBootstrapConfig struct {
 	Path             string
 	Exists           bool
 	NetworkID        string
+	BitTorrentListen string
+	LibP2PListen     []string
 	DHTRouters       []string
 	LibP2PBootstrap  []string
 	LibP2PRendezvous []string
@@ -32,6 +76,7 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 		Path:   path,
 		Exists: true,
 	}
+	seenListen := make(map[string]struct{})
 	seenDHT := make(map[string]struct{})
 	seenLibP2P := make(map[string]struct{})
 	seenRendezvous := make(map[string]struct{})
@@ -54,6 +99,16 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 			if cfg.NetworkID == "" {
 				cfg.NetworkID = normalizeNetworkID(value)
 			}
+		case "bittorrent_listen", "bt_listen":
+			if cfg.BitTorrentListen == "" {
+				cfg.BitTorrentListen = value
+			}
+		case "libp2p_listen":
+			if _, ok := seenListen[value]; ok {
+				continue
+			}
+			seenListen[value] = struct{}{}
+			cfg.LibP2PListen = append(cfg.LibP2PListen, value)
 		case "dht_router":
 			if _, ok := seenDHT[value]; ok {
 				continue
@@ -77,6 +132,29 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 	return cfg, nil
 }
 
+func EnsureDefaultNetworkBootstrapConfig(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	content, err := defaultNetworkBootstrapConfig(path)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c NetworkBootstrapConfig) FileName() string {
 	if c.Path == "" {
 		return ""
@@ -93,4 +171,30 @@ func normalizeNetworkID(value string) string {
 		return ""
 	}
 	return value
+}
+
+func ensureNetworkID(path, networkID string) error {
+	path = strings.TrimSpace(path)
+	networkID = normalizeNetworkID(networkID)
+	if path == "" || networkID == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	cfg, err := LoadNetworkBootstrapConfig(path)
+	if err != nil {
+		return err
+	}
+	if cfg.NetworkID != "" {
+		return nil
+	}
+	body := strings.TrimRight(string(data), "\n")
+	body += "\n\n# Stable 256-bit AiP2P network namespace for latest.org.\n"
+	body += "network_id=" + networkID + "\n"
+	return os.WriteFile(path, []byte(body), 0o644)
 }
