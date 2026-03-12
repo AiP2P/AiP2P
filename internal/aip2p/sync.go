@@ -227,6 +227,7 @@ func (r *syncRuntime) writeStatus(ctx context.Context) error {
 		QueuePath:    r.queuePath,
 		Mode:         r.mode,
 		Seed:         r.seed,
+		NetworkID:    r.netCfg.NetworkID,
 		SyncActivity: activity,
 	}
 	status.LibP2P = r.libp2p.Status(ctx)
@@ -276,6 +277,9 @@ func (r *syncRuntime) announceLocalBundles(ctx context.Context, logf func(string
 	for _, announcement := range announcements {
 		if announcement.InfoHash == "" {
 			continue
+		}
+		if announcement.NetworkID == "" {
+			announcement.NetworkID = r.netCfg.NetworkID
 		}
 		announcement.Magnet = withPeerHints(announcement.Magnet, r.torrentClient.ListenAddrs())
 		r.mu.Lock()
@@ -337,6 +341,9 @@ func (r *syncRuntime) seedLocalTorrents(logf func(string, ...any)) error {
 }
 
 func (r *syncRuntime) handleAnnouncement(announcement SyncAnnouncement) (bool, error) {
+	if r.netCfg.NetworkID != "" && !strings.EqualFold(strings.TrimSpace(announcement.NetworkID), r.netCfg.NetworkID) {
+		return false, nil
+	}
 	if !matchesAnnouncement(announcement, r.subscriptions) {
 		return false, nil
 	}

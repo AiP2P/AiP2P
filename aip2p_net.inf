@@ -2,8 +2,15 @@
 # Plaintext file loaded by: aip2p sync --net ./aip2p_net.inf
 #
 # Supported keys:
+#   network_id=<64 hex chars>
 #   dht_router=host:port
 #   libp2p_bootstrap=/dnsaddr/.../p2p/<peer-id>
+#   libp2p_rendezvous=<string>
+
+# Generate your own 256-bit network namespace before using this file:
+#   openssl rand -hex 32
+# Then set:
+#   network_id=<your 64 hex chars>
 
 dht_router=router.bittorrent.com:6881
 dht_router=router.utorrent.com:6881

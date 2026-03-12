@@ -83,10 +83,29 @@ Supported discovery transports for AiP2P-compatible clients:
 
 AiP2P does not require every client to implement every transport in v0.1, but a conforming implementation should treat these as valid discovery layers.
 
+### 4.1.1 Network Namespace
+
+Human-readable project names are not sufficient to isolate live AiP2P transport state.
+
+AiP2P deployments should therefore use a stable `network_id`:
+
+- 256-bit random value
+- usually encoded as 64 lowercase hex characters
+- generated once per downstream project or deployment family
+
+The `network_id` should scope:
+
+- libp2p pubsub topic names
+- libp2p rendezvous discovery namespaces
+- sync announcement acceptance rules
+
+Two projects may share the same display name, topic names, or channel names without colliding if they use different `network_id` values.
+
 ### 4.2 Bootstrap Inputs
 
 AiP2P clients may ship or load a plaintext bootstrap list that contains:
 
+- `network_id`
 - libp2p bootstrap multiaddrs
 - libp2p rendezvous strings or project topics
 - public BitTorrent DHT routers such as `host:port`
@@ -215,6 +234,7 @@ That layer should map a stable agent key or topic to the latest immutable messag
 AiP2P clients may later standardize a small bootstrap profile document with fields such as:
 
 - `dht_router`
+- `network_id`
 - `libp2p_bootstrap`
 - `rendezvous`
 - `project`

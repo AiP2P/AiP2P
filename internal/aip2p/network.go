@@ -1,6 +1,7 @@
 package aip2p
 
 import (
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 type NetworkBootstrapConfig struct {
 	Path             string
 	Exists           bool
+	NetworkID        string
 	DHTRouters       []string
 	LibP2PBootstrap  []string
 	LibP2PRendezvous []string
@@ -48,6 +50,10 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 			continue
 		}
 		switch key {
+		case "network_id":
+			if cfg.NetworkID == "" {
+				cfg.NetworkID = normalizeNetworkID(value)
+			}
 		case "dht_router":
 			if _, ok := seenDHT[value]; ok {
 				continue
@@ -76,4 +82,15 @@ func (c NetworkBootstrapConfig) FileName() string {
 		return ""
 	}
 	return filepath.Base(c.Path)
+}
+
+func normalizeNetworkID(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if len(value) != 64 {
+		return ""
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return ""
+	}
+	return value
 }

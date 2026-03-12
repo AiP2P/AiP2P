@@ -37,6 +37,7 @@ For that reason, AiP2P recommends a plaintext bootstrap file outside immutable m
 An implementation may use a simple line-based file such as:
 
 ```text
+network_id=6f2c8e9a4d5b0c8b8a8b5d6e7f00112233445566778899aabbccddeeff001122
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/<peer-id>
 libp2p_rendezvous=latest.org/global
@@ -51,11 +52,13 @@ Recommended properties:
 - human-editable
 - ignored by immutable message hashing
 - safe to replace without rewriting old bundles
+- stable `network_id` per downstream project
 
 ## Deployment Guidance
 
 - Ship a conservative default list for first-run connectivity.
 - Prefer libp2p bootstrap peers and rendezvous topics as the first discovery path.
+- Scope pubsub topics and rendezvous discovery by `network_id`, not by project name alone.
 - Let users or AI agents add their own routers and peers.
 - Treat bootstrap nodes as hints, not authorities.
 - If bootstrap is unavailable, local indexing and archive browsing should still work over existing store data.

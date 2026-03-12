@@ -21,6 +21,8 @@ type libp2pRuntime struct {
 	ping               *ping.PingService
 	mdns               mdns.Service
 	mdnsTracker        *mdnsTracker
+	networkID          string
+	mdnsServiceName    string
 	bootstraps         []peer.AddrInfo
 	rendezvous         []string
 	lastBootstrappedAt *time.Time
@@ -59,7 +61,8 @@ func startLibP2PRuntime(ctx context.Context, cfg NetworkBootstrapConfig) (*libp2
 		return nil, fmt.Errorf("bootstrap libp2p dht: %w", err)
 	}
 	mdnsTracker := newMDNSTracker(h)
-	mdnsService := mdns.NewMdnsService(h, "_aip2p._udp", mdnsTracker)
+	serviceName := mdnsServiceName(cfg.NetworkID)
+	mdnsService := mdns.NewMdnsService(h, serviceName, mdnsTracker)
 	if err := mdnsService.Start(); err != nil {
 		_ = dht.Close()
 		_ = h.Close()
@@ -67,13 +70,15 @@ func startLibP2PRuntime(ctx context.Context, cfg NetworkBootstrapConfig) (*libp2
 	}
 	now := time.Now().UTC()
 	return &libp2pRuntime{
-		host:        h,
-		dht:         dht,
-		ping:        ping.NewPingService(h),
-		mdns:        mdnsService,
-		mdnsTracker: mdnsTracker,
-		bootstraps:  peers,
-		rendezvous:  append([]string(nil), cfg.LibP2PRendezvous...),
+		host:               h,
+		dht:                dht,
+		ping:               ping.NewPingService(h),
+		mdns:               mdnsService,
+		mdnsTracker:        mdnsTracker,
+		networkID:          cfg.NetworkID,
+		mdnsServiceName:    serviceName,
+		bootstraps:         peers,
+		rendezvous:         append([]string(nil), cfg.LibP2PRendezvous...),
 		lastBootstrappedAt: &now,
 	}, nil
 }
@@ -106,9 +111,9 @@ func (r *libp2pRuntime) Status(ctx context.Context) SyncLibP2PStatus {
 		ConfiguredRendezvous: len(r.rendezvous),
 		MDNS: SyncMDNSStatus{
 			Enabled:     r.mdns != nil,
-			ServiceName: "_aip2p._udp",
+			ServiceName: r.mdnsServiceName,
 		},
-		LastBootstrapAt:      r.lastBootstrappedAt,
+		LastBootstrapAt: r.lastBootstrappedAt,
 	}
 	for _, addr := range r.host.Addrs() {
 		status.ListenAddrs = append(status.ListenAddrs, addr.String())
@@ -189,17 +194,25 @@ func firstPeerAddr(info peer.AddrInfo) string {
 	return info.Addrs[0].String()
 }
 
+func mdnsServiceName(networkID string) string {
+	networkID = normalizeNetworkID(networkID)
+	if len(networkID) >= 12 {
+		return "_aip2p-" + networkID[:12] + "._udp"
+	}
+	return "_aip2p._udp"
+}
+
 type mdnsPeerState struct {
 	SyncPeerRef
 	LastSeen time.Time
 }
 
 type mdnsTracker struct {
-	host         host.Host
-	mu           sync.RWMutex
-	lastError    string
-	lastFoundAt  *time.Time
-	peers        map[string]mdnsPeerState
+	host        host.Host
+	mu          sync.RWMutex
+	lastError   string
+	lastFoundAt *time.Time
+	peers       map[string]mdnsPeerState
 }
 
 func newMDNSTracker(h host.Host) *mdnsTracker {

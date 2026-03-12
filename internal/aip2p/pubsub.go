@@ -37,6 +37,7 @@ type SyncAnnouncement struct {
 	Author    string   `json:"author,omitempty"`
 	CreatedAt string   `json:"created_at,omitempty"`
 	Project   string   `json:"project,omitempty"`
+	NetworkID string   `json:"network_id,omitempty"`
 	Topics    []string `json:"topics,omitempty"`
 	Tags      []string `json:"tags,omitempty"`
 }
@@ -70,18 +71,18 @@ func startPubSubRuntime(
 	}
 
 	rules.Normalize()
-	joinedTopics := subscribedAnnouncementTopics(rules)
+	joinedTopics := subscribedAnnouncementTopics(hostRuntime.networkID, rules)
 	runtime := &pubsubRuntime{
 		host:                hostRuntime,
 		pubsub:              ps,
 		topics:              make(map[string]*pubsub.Topic),
 		subscriptions:       make(map[string]*pubsub.Subscription),
 		joinedTopics:        joinedTopics,
-		discoveryNamespaces: discoveryNamespaces(hostRuntime.rendezvous),
+		discoveryNamespaces: discoveryNamespaces(hostRuntime.networkID, hostRuntime.rendezvous),
 		status: SyncPubSubStatus{
 			Enabled:             true,
 			JoinedTopics:        append([]string(nil), joinedTopics...),
-			DiscoveryNamespaces: discoveryNamespaces(hostRuntime.rendezvous),
+			DiscoveryNamespaces: discoveryNamespaces(hostRuntime.networkID, hostRuntime.rendezvous),
 		},
 	}
 
@@ -141,7 +142,7 @@ func (r *pubsubRuntime) PublishAnnouncement(ctx context.Context, announcement Sy
 	if err != nil {
 		return err
 	}
-	for _, topicName := range announcementTopics(announcement) {
+	for _, topicName := range announcementTopics(r.host.networkID, announcement) {
 		topic, err := r.ensureTopic(topicName)
 		if err != nil {
 			r.recordError(err)
@@ -298,46 +299,70 @@ func (r *pubsubRuntime) recordError(err error) {
 	r.status.LastError = err.Error()
 }
 
-func subscribedAnnouncementTopics(rules SyncSubscriptions) []string {
+func subscribedAnnouncementTopics(networkID string, rules SyncSubscriptions) []string {
 	rules.Normalize()
-	topics := []string{syncPubSubGlobalTopic}
+	topics := []string{namespacedGlobalTopic(networkID)}
 	if !rules.Empty() {
 		topics = topics[:0]
 		for _, channel := range rules.Channels {
-			topics = append(topics, namespacedTopic("channel", channel))
+			topics = append(topics, namespacedTopic(networkID, "channel", channel))
 		}
 		for _, topic := range rules.Topics {
-			topics = append(topics, namespacedTopic("topic", topic))
+			topics = append(topics, namespacedTopic(networkID, "topic", topic))
 		}
 		for _, tag := range rules.Tags {
-			topics = append(topics, namespacedTopic("tag", tag))
+			topics = append(topics, namespacedTopic(networkID, "tag", tag))
 		}
 	}
 	return uniqueStrings(topics)
 }
 
-func discoveryNamespaces(namespaces []string) []string {
-	values := append([]string{syncPubSubDiscoveryDefault}, namespaces...)
+func discoveryNamespaces(networkID string, namespaces []string) []string {
+	values := []string{namespacedDiscoveryNamespace(networkID, syncPubSubDiscoveryDefault)}
+	for _, namespace := range namespaces {
+		values = append(values, namespacedDiscoveryNamespace(networkID, namespace))
+	}
 	return uniqueStrings(values)
 }
 
-func announcementTopics(announcement SyncAnnouncement) []string {
-	topics := []string{syncPubSubGlobalTopic}
+func announcementTopics(networkID string, announcement SyncAnnouncement) []string {
+	topics := []string{namespacedGlobalTopic(networkID)}
 	if announcement.Channel != "" {
-		topics = append(topics, namespacedTopic("channel", announcement.Channel))
+		topics = append(topics, namespacedTopic(networkID, "channel", announcement.Channel))
 	}
 	for _, topic := range announcement.Topics {
-		topics = append(topics, namespacedTopic("topic", topic))
+		topics = append(topics, namespacedTopic(networkID, "topic", topic))
 	}
 	for _, tag := range announcement.Tags {
-		topics = append(topics, namespacedTopic("tag", tag))
+		topics = append(topics, namespacedTopic(networkID, "tag", tag))
 	}
 	return uniqueStrings(topics)
 }
 
-func namespacedTopic(kind, value string) string {
+func namespacedGlobalTopic(networkID string) string {
+	if networkID == "" {
+		return syncPubSubGlobalTopic
+	}
+	return syncPubSubTopicPrefix + "/" + networkID + "/global"
+}
+
+func namespacedTopic(networkID, kind, value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
-	return syncPubSubTopicPrefix + "/" + kind + "/" + url.PathEscape(value)
+	if networkID == "" {
+		return syncPubSubTopicPrefix + "/" + kind + "/" + url.PathEscape(value)
+	}
+	return syncPubSubTopicPrefix + "/" + networkID + "/" + kind + "/" + url.PathEscape(value)
+}
+
+func namespacedDiscoveryNamespace(networkID, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if networkID == "" {
+		return value
+	}
+	return "aip2p/discovery/" + networkID + "/" + url.PathEscape(value)
 }
 
 func normalizeAnnouncement(announcement SyncAnnouncement) SyncAnnouncement {
@@ -354,6 +379,7 @@ func normalizeAnnouncement(announcement SyncAnnouncement) SyncAnnouncement {
 	announcement.Title = strings.TrimSpace(announcement.Title)
 	announcement.Author = strings.TrimSpace(announcement.Author)
 	announcement.Project = strings.TrimSpace(announcement.Project)
+	announcement.NetworkID = normalizeNetworkID(announcement.NetworkID)
 	announcement.Topics = uniqueFold(announcement.Topics)
 	announcement.Tags = uniqueFold(announcement.Tags)
 	return announcement
@@ -401,6 +427,7 @@ func buildAnnouncement(msg Message, mi *metainfo.MetaInfo, info metainfo.Info) S
 		Author:    msg.Author,
 		CreatedAt: msg.CreatedAt,
 		Project:   nestedString(msg.Extensions, "project"),
+		NetworkID: nestedString(msg.Extensions, "network_id"),
 		Topics:    stringSlice(msg.Extensions["topics"]),
 		Tags:      append([]string(nil), msg.Tags...),
 	})

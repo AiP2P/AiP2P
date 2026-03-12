@@ -15,6 +15,7 @@ type SyncRuntimeStatus struct {
 	QueuePath     string               `json:"queue_path"`
 	Mode          string               `json:"mode"`
 	Seed          bool                 `json:"seed"`
+	NetworkID     string               `json:"network_id"`
 	LibP2P        SyncLibP2PStatus     `json:"libp2p"`
 	BitTorrentDHT SyncBitTorrentStatus `json:"bittorrent_dht"`
 	PubSub        SyncPubSubStatus     `json:"pubsub"`

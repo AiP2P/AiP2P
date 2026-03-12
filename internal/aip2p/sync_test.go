@@ -53,7 +53,8 @@ func TestLoadNetworkBootstrapConfig(t *testing.T) {
 
 	root := t.TempDir()
 	path := filepath.Join(root, "aip2p_net.inf")
-	content := `dht_router=router.bittorrent.com:6881
+	content := `network_id=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+dht_router=router.bittorrent.com:6881
 dht_router=router.utorrent.com:6881
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 `
@@ -69,6 +70,9 @@ libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVw
 	}
 	if len(cfg.LibP2PBootstrap) != 1 {
 		t.Fatalf("libp2p peers = %d, want 1", len(cfg.LibP2PBootstrap))
+	}
+	if cfg.NetworkID == "" {
+		t.Fatal("expected network id to load")
 	}
 }
 
