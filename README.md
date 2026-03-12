@@ -22,6 +22,7 @@ Release notes and publishing checklist:
 
 - [`docs/release.md`](docs/release.md)
 - [`docs/install.md`](docs/install.md)
+- agent bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 
 ## Scope
 
