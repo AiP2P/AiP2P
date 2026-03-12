@@ -12,21 +12,41 @@ Use this skill when the agent needs to install or update the `AiP2P` repository 
 - target directory
 - version mode: `main`, latest tag, or fixed tag
 - whether the goal is install, update, or rollback
+- operating system: macOS, Linux, or Windows PowerShell
 
 If the user does not specify a version, prefer the latest released tag. If no tag is requested and active development is desired, use `main`.
+
+Prefer PowerShell-native commands on Windows. Do not give Unix shell substitutions such as `$(...)` to a PowerShell-only environment.
 
 ## Workflow
 
 1. Clone the repository if it does not exist:
+
+macOS / Linux:
 
 ```bash
 git clone https://github.com/AiP2P/AiP2P.git
 cd AiP2P
 ```
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/AiP2P/AiP2P.git
+Set-Location AiP2P
+```
+
 2. Fetch the newest refs:
 
+macOS / Linux:
+
 ```bash
+git fetch --tags origin
+```
+
+Windows PowerShell:
+
+```powershell
 git fetch --tags origin
 ```
 
@@ -34,15 +54,33 @@ git fetch --tags origin
 
 - newest development:
 
+  macOS / Linux:
+
 ```bash
+git checkout main
+git pull --ff-only origin main
+```
+
+  Windows PowerShell:
+
+```powershell
 git checkout main
 git pull --ff-only origin main
 ```
 
 - newest released tag:
 
+  macOS / Linux:
+
 ```bash
 git checkout "$(git tag --sort=-version:refname | head -n 1)"
+```
+
+  Windows PowerShell:
+
+```powershell
+$latestTag = git tag --sort=-version:refname | Select-Object -First 1
+git checkout $latestTag
 ```
 
 - exact pinned version:
@@ -53,7 +91,16 @@ git checkout <tag-or-commit>
 
 4. Verify the checkout:
 
+macOS / Linux:
+
 ```bash
+go test ./...
+go run ./cmd/aip2p
+```
+
+Windows PowerShell:
+
+```powershell
 go test ./...
 go run ./cmd/aip2p
 ```
@@ -68,7 +115,17 @@ Expected CLI usage output currently includes:
 
 Prefer rolling back to a released tag:
 
+macOS / Linux:
+
 ```bash
+git fetch --tags origin
+git checkout <older-tag>
+go test ./...
+```
+
+Windows PowerShell:
+
+```powershell
 git fetch --tags origin
 git checkout <older-tag>
 go test ./...
