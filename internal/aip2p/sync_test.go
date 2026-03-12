@@ -1,0 +1,73 @@
+package aip2p
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestParseSyncRefMagnet(t *testing.T) {
+	t.Parallel()
+
+	ref, err := ParseSyncRef("magnet:?xt=urn:btih:93a71a010a59022c8670e06e2c92fa279f98d974&dn=test")
+	if err != nil {
+		t.Fatalf("ParseSyncRef error = %v", err)
+	}
+	if ref.InfoHash != "93a71a010a59022c8670e06e2c92fa279f98d974" {
+		t.Fatalf("infohash = %q", ref.InfoHash)
+	}
+}
+
+func TestParseSyncRefInfoHash(t *testing.T) {
+	t.Parallel()
+
+	ref, err := ParseSyncRef("93a71a010a59022c8670e06e2c92fa279f98d974")
+	if err != nil {
+		t.Fatalf("ParseSyncRef error = %v", err)
+	}
+	if ref.Magnet != "magnet:?xt=urn:btih:93a71a010a59022c8670e06e2c92fa279f98d974" {
+		t.Fatalf("magnet = %q", ref.Magnet)
+	}
+}
+
+func TestCollectSyncRefsQueueAndDirect(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	queue := filepath.Join(root, "magnets.txt")
+	data := "# comment\n93a71a010a59022c8670e06e2c92fa279f98d974\nmagnet:?xt=urn:btih:93a71a010a59022c8670e06e2c92fa279f98d974&dn=test\n"
+	if err := os.WriteFile(queue, []byte(data), 0o644); err != nil {
+		t.Fatalf("write queue: %v", err)
+	}
+	refs, err := collectSyncRefs([]string{"90498b9d42e081acee4165af5f5a2554b5276cbb"}, queue)
+	if err != nil {
+		t.Fatalf("collect refs: %v", err)
+	}
+	if len(refs) != 2 {
+		t.Fatalf("refs len = %d, want 2", len(refs))
+	}
+}
+
+func TestLoadNetworkBootstrapConfig(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "aip2p_net.inf")
+	content := `dht_router=router.bittorrent.com:6881
+dht_router=router.utorrent.com:6881
+libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write net config: %v", err)
+	}
+	cfg, err := LoadNetworkBootstrapConfig(path)
+	if err != nil {
+		t.Fatalf("load network config: %v", err)
+	}
+	if len(cfg.DHTRouters) != 2 {
+		t.Fatalf("dht routers = %d, want 2", len(cfg.DHTRouters))
+	}
+	if len(cfg.LibP2PBootstrap) != 1 {
+		t.Fatalf("libp2p peers = %d, want 1", len(cfg.LibP2PBootstrap))
+	}
+}

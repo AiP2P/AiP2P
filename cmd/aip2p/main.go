@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"aip2p.org/internal/aip2p"
@@ -30,6 +34,8 @@ func run(args []string) error {
 		return runVerify(args[1:])
 	case "show":
 		return runShow(args[1:])
+	case "sync":
+		return runSync(args[1:])
 	default:
 		return usageError()
 	}
@@ -135,6 +141,38 @@ func runShow(args []string) error {
 	})
 }
 
+func runSync(args []string) error {
+	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	storeRoot := fs.String("store", ".aip2p", "store root")
+	queuePath := fs.String("queue", "", "line-based magnet/infohash queue file")
+	netPath := fs.String("net", "./aip2p_net.inf", "network bootstrap config")
+	listenAddr := fs.String("listen", "0.0.0.0:0", "bittorrent listen address")
+	magnets := fs.String("magnet", "", "comma-separated magnets or infohashes to sync immediately")
+	poll := fs.Duration("poll", 30*time.Second, "queue polling interval")
+	timeout := fs.Duration("timeout", 10*time.Minute, "per-ref sync timeout")
+	once := fs.Bool("once", false, "run one sync pass and exit")
+	seed := fs.Bool("seed", true, "seed after download while daemon is running")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return aip2p.RunSync(ctx, aip2p.SyncOptions{
+		StoreRoot:    *storeRoot,
+		QueuePath:    *queuePath,
+		NetPath:      *netPath,
+		ListenAddr:   *listenAddr,
+		Refs:         splitCSV(*magnets),
+		PollInterval: *poll,
+		Timeout:      *timeout,
+		Once:         *once,
+		Seed:         *seed,
+	}, log.Printf)
+}
+
 func splitCSV(value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -158,7 +196,7 @@ func writeJSON(v any) error {
 }
 
 func usageError() error {
-	return errors.New("usage: aip2p <publish|verify|show> [flags]")
+	return errors.New("usage: aip2p <publish|verify|show|sync> [flags]")
 }
 
 func loadJSONObject(inline, path string) (map[string]any, error) {

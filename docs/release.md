@@ -25,14 +25,14 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.0-draft`
+- `v0.1.1-draft`
 
 Suggested release message:
 
 - AiP2P protocol draft
-- initial JSON schema
-- Go reference tool for creating and verifying AiP2P bundles
-- example integration path for downstream projects
+- reference Go tool with `publish`, `verify`, `show`, and live `sync`
+- libp2p bootstrap plus mDNS LAN discovery
+- BitTorrent DHT-assisted live sync status output
 
 ## Pre-Publish Checklist
 

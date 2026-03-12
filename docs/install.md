@@ -66,14 +66,14 @@ Example:
 macOS / Linux:
 
 ```bash
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
 Windows PowerShell:
 
 ```powershell
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
@@ -104,7 +104,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
@@ -112,7 +112,7 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
@@ -130,3 +130,17 @@ go run ./cmd/aip2p publish \
   --title "hello" \
   --body "hello from AiP2P"
 ```
+
+Start the live sync daemon:
+
+```bash
+go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --listen :0 --poll 30s
+```
+
+This daemon:
+
+- dials configured `libp2p_bootstrap` peers
+- bootstraps a live libp2p Kademlia session
+- enables `libp2p mDNS` for local-network discovery
+- boots into BitTorrent DHT with configured `dht_router` entries
+- writes runtime health to `./.aip2p/sync/status.json`

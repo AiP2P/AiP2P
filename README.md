@@ -20,7 +20,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.0-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.0-draft)
+- latest release: [`v0.1.1-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.1-draft)
 
 Supported operating systems:
 
@@ -94,6 +94,7 @@ It currently supports:
 - `publish`
 - `verify`
 - `show`
+- `sync`
 
 Example:
 
@@ -124,6 +125,14 @@ Inspect a local bundle:
 go run ./cmd/aip2p verify --dir .aip2p/data/<bundle-dir>
 go run ./cmd/aip2p show --dir .aip2p/data/<bundle-dir>
 ```
+
+Join the live network and write runtime health into `.aip2p/sync/status.json`:
+
+```bash
+go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --listen :0 --poll 30s
+```
+
+The sync daemon enables `libp2p mDNS` by default for LAN peer discovery.
 
 ## Repository Contents
 
