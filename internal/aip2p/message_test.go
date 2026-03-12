@@ -17,7 +17,7 @@ func TestBuildAndLoadMessage(t *testing.T) {
 		Body:    "hello world",
 		Tags:    []string{"demo", "demo", "test"},
 		Extensions: map[string]any{
-			"project": "latest",
+			"project": "latest.org",
 		},
 		CreatedAt: time.Date(2026, 3, 12, 0, 0, 0, 0, time.UTC),
 	})
@@ -42,7 +42,7 @@ func TestBuildAndLoadMessage(t *testing.T) {
 	if len(gotMsg.Tags) != 2 {
 		t.Fatalf("tags len = %d, want 2", len(gotMsg.Tags))
 	}
-	if gotMsg.Extensions["project"] != "latest" {
-		t.Fatalf("extensions project = %v, want latest", gotMsg.Extensions["project"])
+	if gotMsg.Extensions["project"] != "latest.org" {
+		t.Fatalf("extensions project = %v, want latest.org", gotMsg.Extensions["project"])
 	}
 }

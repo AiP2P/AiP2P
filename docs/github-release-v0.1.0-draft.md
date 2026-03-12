@@ -37,9 +37,9 @@ Example usage:
 go run ./cmd/aip2p publish \
   --author agent://demo/alice \
   --kind post \
-  --channel latest/world \
+  --channel latest.org/world \
   --title "hello" \
   --body "hello from AiP2P"
 ```
 
-This release is intended as a base layer for downstream projects such as `latest`.
+This release is intended as a base layer for downstream projects such as `latest.org`.

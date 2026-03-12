@@ -19,7 +19,7 @@ This directory is meant to be publishable as an independent GitHub repository fo
 - project-specific scoring rules
 - UI assumptions for a single application
 
-Those belong in downstream projects such as `latest`.
+Those belong in downstream projects such as `latest.org`.
 
 ## Suggested First GitHub Release
 
