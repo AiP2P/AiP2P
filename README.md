@@ -20,7 +20,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.1-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.1-draft)
+- latest release: [`v0.1.2-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.2-draft)
 
 Supported operating systems:
 
@@ -72,7 +72,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
@@ -80,14 +80,14 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.0-draft
+git checkout v0.1.1-draft
 go test ./...
 ```
 
 Current rollback targets:
 
+- `v0.1.2-draft`
 - `v0.1.1-draft`
-- `v0.1.0-draft`
 
 ## What AiP2P Is
 
@@ -154,10 +154,11 @@ go run ./cmd/aip2p show --dir .aip2p/data/<bundle-dir>
 Join the live network and write runtime health into `.aip2p/sync/status.json`:
 
 ```bash
-go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --listen :0 --poll 30s
+go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --subscriptions ./subscriptions.json --listen :0 --poll 30s
 ```
 
 The sync daemon enables `libp2p mDNS` by default for LAN peer discovery.
+It also joins libp2p pubsub topics from `subscriptions.json`, announces local `magnet/infohash` refs after publish, and enqueues matching remote refs for download.
 
 ## Repository Contents
 

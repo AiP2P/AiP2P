@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	anacrolixdht "github.com/anacrolix/dht/v2"
@@ -16,15 +18,16 @@ import (
 )
 
 type SyncOptions struct {
-	StoreRoot    string
-	QueuePath    string
-	NetPath      string
-	ListenAddr   string
-	Refs         []string
-	PollInterval time.Duration
-	Timeout      time.Duration
-	Once         bool
-	Seed         bool
+	StoreRoot         string
+	QueuePath         string
+	NetPath           string
+	SubscriptionsPath string
+	ListenAddr        string
+	Refs              []string
+	PollInterval      time.Duration
+	Timeout           time.Duration
+	Once              bool
+	Seed              bool
 }
 
 type SyncRef struct {
@@ -34,11 +37,11 @@ type SyncRef struct {
 }
 
 type SyncItemResult struct {
-	Ref       string `json:"ref"`
-	InfoHash  string `json:"infohash,omitempty"`
+	Ref        string `json:"ref"`
+	InfoHash   string `json:"infohash,omitempty"`
 	ContentDir string `json:"content_dir,omitempty"`
-	Status    string `json:"status"`
-	Message   string `json:"message,omitempty"`
+	Status     string `json:"status"`
+	Message    string `json:"message,omitempty"`
 }
 
 func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) error {
@@ -59,6 +62,10 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	netCfg, err := LoadNetworkBootstrapConfig(opts.NetPath)
 	if err != nil {
 		return fmt.Errorf("load network bootstrap config: %w", err)
+	}
+	subscriptions, err := LoadSyncSubscriptions(opts.SubscriptionsPath)
+	if err != nil {
+		return fmt.Errorf("load subscriptions: %w", err)
 	}
 
 	cfg := torrent.NewDefaultClientConfig()
@@ -98,7 +105,15 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		torrentClient: client,
 		libp2p:        libp2pRuntime,
 		netCfg:        netCfg,
+		subscriptions: subscriptions,
+		announced:     make(map[string]struct{}),
+		seeded:        make(map[string]struct{}),
 	}
+	runtime.pubsub, err = startPubSubRuntime(ctx, libp2pRuntime, subscriptions, runtime.handleAnnouncement)
+	if err != nil {
+		return err
+	}
+	defer runtime.pubsub.Close()
 	if err := runtime.writeStatus(ctx); err != nil && logf != nil {
 		logf("write sync status: %v", err)
 	}
@@ -112,32 +127,23 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		} else if strings.TrimSpace(opts.NetPath) != "" {
 			logf("network bootstrap file not found: %s", opts.NetPath)
 		}
+		if !subscriptions.Empty() {
+			logf("subscription filters: %d channels, %d topics, %d tags", len(subscriptions.Channels), len(subscriptions.Topics), len(subscriptions.Tags))
+		}
 	}
 
 	if opts.Once {
-		refs, err := collectSyncRefs(opts.Refs, queuePath)
-		if err != nil {
+		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
+			logf("seed local torrents: %v", err)
+		}
+		if err := runtime.processQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
 			return err
 		}
-		runtime.setQueueRefs(len(refs))
-		if err := runtime.writeStatus(ctx); err != nil && logf != nil {
-			logf("write sync status: %v", err)
-		}
-		if len(refs) == 0 {
+		if runtime.queueRefs() == 0 {
 			return errors.New("no magnet or infohash refs found")
 		}
-		for _, ref := range refs {
-			result := syncRef(ctx, client, store, ref, opts.Timeout)
-			runtime.recordResult(result)
-			if err := runtime.writeStatus(ctx); err != nil && logf != nil {
-				logf("write sync status: %v", err)
-			}
-			if logf != nil {
-				logf("%s: %s", result.Status, result.Ref)
-				if result.Message != "" {
-					logf("  %s", result.Message)
-				}
-			}
+		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
+			logf("announce local bundles: %v", err)
 		}
 		return nil
 	}
@@ -145,26 +151,14 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 	for {
-		refs, err := collectSyncRefs(opts.Refs, queuePath)
-		if err != nil {
+		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
+			logf("seed local torrents: %v", err)
+		}
+		if err := runtime.processQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
 			return err
 		}
-		runtime.setQueueRefs(len(refs))
-		if err := runtime.writeStatus(ctx); err != nil && logf != nil {
-			logf("write sync status: %v", err)
-		}
-		for _, ref := range refs {
-			result := syncRef(ctx, client, store, ref, opts.Timeout)
-			runtime.recordResult(result)
-			if err := runtime.writeStatus(ctx); err != nil && logf != nil {
-				logf("write sync status: %v", err)
-			}
-			if logf != nil {
-				logf("%s: %s", result.Status, result.Ref)
-				if result.Message != "" {
-					logf("  %s", result.Message)
-				}
-			}
+		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
+			logf("announce local bundles: %v", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -175,6 +169,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 }
 
 type syncRuntime struct {
+	mu            sync.Mutex
 	store         *Store
 	queuePath     string
 	mode          string
@@ -182,16 +177,24 @@ type syncRuntime struct {
 	startedAt     time.Time
 	torrentClient *torrent.Client
 	libp2p        *libp2pRuntime
+	pubsub        *pubsubRuntime
 	netCfg        NetworkBootstrapConfig
+	subscriptions SyncSubscriptions
+	announced     map[string]struct{}
+	seeded        map[string]struct{}
 	activity      SyncActivityStatus
 }
 
 func (r *syncRuntime) setQueueRefs(n int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.activity.QueueRefs = n
 }
 
 func (r *syncRuntime) recordResult(result SyncItemResult) {
 	now := time.Now().UTC()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.activity.LastRef = result.Ref
 	r.activity.LastInfoHash = result.InfoHash
 	r.activity.LastStatus = result.Status
@@ -207,7 +210,16 @@ func (r *syncRuntime) recordResult(result SyncItemResult) {
 	}
 }
 
+func (r *syncRuntime) queueRefs() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.activity.QueueRefs
+}
+
 func (r *syncRuntime) writeStatus(ctx context.Context) error {
+	r.mu.Lock()
+	activity := r.activity
+	r.mu.Unlock()
 	status := SyncRuntimeStatus{
 		StartedAt:    r.startedAt,
 		PID:          os.Getpid(),
@@ -215,11 +227,129 @@ func (r *syncRuntime) writeStatus(ctx context.Context) error {
 		QueuePath:    r.queuePath,
 		Mode:         r.mode,
 		Seed:         r.seed,
-		SyncActivity: r.activity,
+		SyncActivity: activity,
 	}
 	status.LibP2P = r.libp2p.Status(ctx)
 	status.BitTorrentDHT = torrentStatus(r.torrentClient, len(r.netCfg.DHTRouters))
+	status.PubSub = r.pubsub.Status()
 	return writeSyncStatus(r.store, status)
+}
+
+func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout time.Duration, logf func(string, ...any)) error {
+	refs, err := collectSyncRefs(direct, r.queuePath)
+	if err != nil {
+		return err
+	}
+	r.setQueueRefs(len(refs))
+	if err := r.writeStatus(ctx); err != nil && logf != nil {
+		logf("write sync status: %v", err)
+	}
+	for _, ref := range refs {
+		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout)
+		r.recordResult(result)
+		if result.Status == "imported" || result.Status == "skipped" {
+			if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
+				logf("remove sync ref: %v", err)
+			}
+		}
+		if err := r.writeStatus(ctx); err != nil && logf != nil {
+			logf("write sync status: %v", err)
+		}
+		if logf != nil {
+			logf("%s: %s", result.Status, result.Ref)
+			if result.Message != "" {
+				logf("  %s", result.Message)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *syncRuntime) announceLocalBundles(ctx context.Context, logf func(string, ...any)) error {
+	if r.pubsub == nil {
+		return nil
+	}
+	announcements, err := localAnnouncements(r.store)
+	if err != nil {
+		return err
+	}
+	for _, announcement := range announcements {
+		if announcement.InfoHash == "" {
+			continue
+		}
+		announcement.Magnet = withPeerHints(announcement.Magnet, r.torrentClient.ListenAddrs())
+		r.mu.Lock()
+		_, seen := r.announced[announcement.InfoHash]
+		if !seen {
+			r.announced[announcement.InfoHash] = struct{}{}
+		}
+		r.mu.Unlock()
+		if seen {
+			continue
+		}
+		if err := r.pubsub.PublishAnnouncement(ctx, announcement); err != nil {
+			r.mu.Lock()
+			delete(r.announced, announcement.InfoHash)
+			r.mu.Unlock()
+			return err
+		}
+		if logf != nil {
+			logf("announced: %s (%s)", announcement.InfoHash, announcement.Title)
+		}
+	}
+	if err := r.writeStatus(ctx); err != nil && logf != nil {
+		logf("write sync status: %v", err)
+	}
+	return nil
+}
+
+func (r *syncRuntime) seedLocalTorrents(logf func(string, ...any)) error {
+	entries, err := os.ReadDir(r.store.TorrentDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".torrent" {
+			continue
+		}
+		infoHash := strings.ToLower(strings.TrimSuffix(entry.Name(), ".torrent"))
+		r.mu.Lock()
+		_, seen := r.seeded[infoHash]
+		if !seen {
+			r.seeded[infoHash] = struct{}{}
+		}
+		r.mu.Unlock()
+		if seen {
+			continue
+		}
+		path := filepath.Join(r.store.TorrentDir, entry.Name())
+		if _, err := r.torrentClient.AddTorrentFromFile(path); err != nil {
+			r.mu.Lock()
+			delete(r.seeded, infoHash)
+			r.mu.Unlock()
+			return err
+		}
+		if logf != nil {
+			logf("seeding: %s", infoHash)
+		}
+	}
+	return nil
+}
+
+func (r *syncRuntime) handleAnnouncement(announcement SyncAnnouncement) (bool, error) {
+	if !matchesAnnouncement(announcement, r.subscriptions) {
+		return false, nil
+	}
+	ref, err := ParseSyncRef(announcement.Magnet)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(r.store.TorrentPath(ref.InfoHash)); err == nil {
+		return false, nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	return enqueueSyncRef(r.queuePath, ref)
 }
 
 func torrentStatus(client *torrent.Client, configuredRouters int) SyncBitTorrentStatus {
@@ -238,6 +368,143 @@ func torrentStatus(client *torrent.Client, configuredRouters int) SyncBitTorrent
 		status.OutstandingTransactions += stats.OutstandingTransactions
 	}
 	return status
+}
+
+func enqueueSyncRef(queuePath string, ref SyncRef) (bool, error) {
+	if strings.TrimSpace(queuePath) == "" {
+		return false, errors.New("queue path is required")
+	}
+	data, err := os.ReadFile(queuePath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "//") {
+			continue
+		}
+		queued, err := ParseSyncRef(line)
+		if err != nil {
+			continue
+		}
+		if queued.InfoHash != "" && queued.InfoHash == ref.InfoHash {
+			return false, nil
+		}
+		if queued.Magnet != "" && queued.Magnet == ref.Magnet {
+			return false, nil
+		}
+	}
+	file, err := os.OpenFile(queuePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+	if _, err := file.WriteString(ref.Magnet + "\n"); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func removeSyncRef(queuePath string, ref SyncRef) error {
+	data, err := os.ReadFile(queuePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	out := make([]string, 0, len(lines))
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "//") {
+			out = append(out, rawLine)
+			continue
+		}
+		queued, err := ParseSyncRef(line)
+		if err != nil {
+			out = append(out, rawLine)
+			continue
+		}
+		if queued.InfoHash != "" && queued.InfoHash == ref.InfoHash {
+			continue
+		}
+		if queued.Magnet != "" && queued.Magnet == ref.Magnet {
+			continue
+		}
+		out = append(out, rawLine)
+	}
+	content := strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
+	return os.WriteFile(queuePath, []byte(content), 0o644)
+}
+
+func withPeerHints(magnet string, addrs []net.Addr) string {
+	if strings.TrimSpace(magnet) == "" || len(addrs) == 0 {
+		return magnet
+	}
+	uri, err := url.Parse(magnet)
+	if err != nil {
+		return magnet
+	}
+	query := uri.Query()
+	seen := make(map[string]struct{})
+	for _, existing := range query["x.pe"] {
+		seen[existing] = struct{}{}
+	}
+	ports := make(map[string]struct{})
+	for _, addr := range addrs {
+		_, port, err := net.SplitHostPort(addr.String())
+		if err != nil || strings.TrimSpace(port) == "" {
+			continue
+		}
+		ports[port] = struct{}{}
+	}
+	if len(ports) == 0 {
+		return magnet
+	}
+	hosts := localPeerHosts()
+	for port := range ports {
+		for _, host := range hosts {
+			peerAddr := net.JoinHostPort(host, port)
+			if _, ok := seen[peerAddr]; ok {
+				continue
+			}
+			seen[peerAddr] = struct{}{}
+			query.Add("x.pe", peerAddr)
+		}
+	}
+	uri.RawQuery = query.Encode()
+	return uri.String()
+}
+
+func localPeerHosts() []string {
+	out := []string{"127.0.0.1"}
+	seen := map[string]struct{}{
+		"127.0.0.1": {},
+	}
+	ifaces, err := net.InterfaceAddrs()
+	if err != nil {
+		return out
+	}
+	for _, iface := range ifaces {
+		ipNet, ok := iface.(*net.IPNet)
+		if !ok || ipNet.IP == nil {
+			continue
+		}
+		ip := ipNet.IP
+		if ip.IsUnspecified() || ip.IsMulticast() {
+			continue
+		}
+		if ip4 := ip.To4(); ip4 != nil {
+			text := ip4.String()
+			if _, ok := seen[text]; ok {
+				continue
+			}
+			seen[text] = struct{}{}
+			out = append(out, text)
+		}
+	}
+	return out
 }
 
 func syncMode(once bool) string {
@@ -499,11 +766,11 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 		}
 	}
 	return SyncItemResult{
-		Ref:       ref.Raw,
-		InfoHash:  infoHash,
+		Ref:        ref.Raw,
+		InfoHash:   infoHash,
 		ContentDir: contentDir,
-		Status:    "imported",
-		Message:   "bundle downloaded and indexed in local store",
+		Status:     "imported",
+		Message:    "bundle downloaded and indexed in local store",
 	}
 }
 

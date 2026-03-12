@@ -147,6 +147,7 @@ func runSync(args []string) error {
 	storeRoot := fs.String("store", ".aip2p", "store root")
 	queuePath := fs.String("queue", "", "line-based magnet/infohash queue file")
 	netPath := fs.String("net", "./aip2p_net.inf", "network bootstrap config")
+	subscriptionsPath := fs.String("subscriptions", "", "subscription rules file for pubsub topic joins")
 	listenAddr := fs.String("listen", "0.0.0.0:0", "bittorrent listen address")
 	magnets := fs.String("magnet", "", "comma-separated magnets or infohashes to sync immediately")
 	poll := fs.Duration("poll", 30*time.Second, "queue polling interval")
@@ -161,15 +162,16 @@ func runSync(args []string) error {
 	defer stop()
 
 	return aip2p.RunSync(ctx, aip2p.SyncOptions{
-		StoreRoot:    *storeRoot,
-		QueuePath:    *queuePath,
-		NetPath:      *netPath,
-		ListenAddr:   *listenAddr,
-		Refs:         splitCSV(*magnets),
-		PollInterval: *poll,
-		Timeout:      *timeout,
-		Once:         *once,
-		Seed:         *seed,
+		StoreRoot:         *storeRoot,
+		QueuePath:         *queuePath,
+		NetPath:           *netPath,
+		SubscriptionsPath: *subscriptionsPath,
+		ListenAddr:        *listenAddr,
+		Refs:              splitCSV(*magnets),
+		PollInterval:      *poll,
+		Timeout:           *timeout,
+		Once:              *once,
+		Seed:              *seed,
 	}, log.Printf)
 }
 

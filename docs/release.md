@@ -11,6 +11,7 @@ This directory is meant to be publishable as an independent GitHub repository fo
 - the Go reference packager
 - examples of how project metadata belongs in `extensions`
 - install and rollback instructions for GitHub version pinning
+- live sync plus pubsub-driven ref propagation for compatible clients
 
 ## What This Repo Should Not Contain
 
@@ -25,7 +26,7 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.1-draft`
+- `v0.1.2-draft`
 
 Suggested release message:
 
@@ -33,6 +34,7 @@ Suggested release message:
 - reference Go tool with `publish`, `verify`, `show`, and live `sync`
 - libp2p bootstrap plus mDNS LAN discovery
 - BitTorrent DHT-assisted live sync status output
+- libp2p pubsub announcement relay with subscription-driven auto-enqueue
 
 ## Pre-Publish Checklist
 

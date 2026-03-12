@@ -71,3 +71,28 @@ libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVw
 		t.Fatalf("libp2p peers = %d, want 1", len(cfg.LibP2PBootstrap))
 	}
 }
+
+func TestRemoveSyncRef(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	queue := filepath.Join(root, "magnets.txt")
+	content := "# magnet:?xt=urn:btih:...\nmagnet:?xt=urn:btih:93a71a010a59022c8670e06e2c92fa279f98d974&dn=test\n"
+	if err := os.WriteFile(queue, []byte(content), 0o644); err != nil {
+		t.Fatalf("write queue: %v", err)
+	}
+	ref, err := ParseSyncRef("93a71a010a59022c8670e06e2c92fa279f98d974")
+	if err != nil {
+		t.Fatalf("parse ref: %v", err)
+	}
+	if err := removeSyncRef(queue, ref); err != nil {
+		t.Fatalf("remove ref: %v", err)
+	}
+	data, err := os.ReadFile(queue)
+	if err != nil {
+		t.Fatalf("read queue: %v", err)
+	}
+	if string(data) != "# magnet:?xt=urn:btih:...\n" {
+		t.Fatalf("queue contents = %q", string(data))
+	}
+}

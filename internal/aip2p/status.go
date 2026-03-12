@@ -8,32 +8,33 @@ import (
 )
 
 type SyncRuntimeStatus struct {
-	UpdatedAt      time.Time              `json:"updated_at"`
-	StartedAt      time.Time              `json:"started_at"`
-	PID            int                    `json:"pid"`
-	StoreRoot      string                 `json:"store_root"`
-	QueuePath      string                 `json:"queue_path"`
-	Mode           string                 `json:"mode"`
-	Seed           bool                   `json:"seed"`
-	LibP2P         SyncLibP2PStatus       `json:"libp2p"`
-	BitTorrentDHT  SyncBitTorrentStatus   `json:"bittorrent_dht"`
-	SyncActivity   SyncActivityStatus     `json:"sync_activity"`
+	UpdatedAt     time.Time            `json:"updated_at"`
+	StartedAt     time.Time            `json:"started_at"`
+	PID           int                  `json:"pid"`
+	StoreRoot     string               `json:"store_root"`
+	QueuePath     string               `json:"queue_path"`
+	Mode          string               `json:"mode"`
+	Seed          bool                 `json:"seed"`
+	LibP2P        SyncLibP2PStatus     `json:"libp2p"`
+	BitTorrentDHT SyncBitTorrentStatus `json:"bittorrent_dht"`
+	PubSub        SyncPubSubStatus     `json:"pubsub"`
+	SyncActivity  SyncActivityStatus   `json:"sync_activity"`
 }
 
 type SyncLibP2PStatus struct {
-	Enabled              bool          `json:"enabled"`
-	PeerID               string        `json:"peer_id,omitempty"`
-	ListenAddrs          []string      `json:"listen_addrs,omitempty"`
-	ConfiguredBootstrap  int           `json:"configured_bootstrap"`
-	ConfiguredRendezvous int           `json:"configured_rendezvous"`
-	ConnectedBootstrap   int           `json:"connected_bootstrap"`
-	ReachableBootstrap   int           `json:"reachable_bootstrap"`
-	ConnectedPeers       int           `json:"connected_peers"`
-	RoutingTablePeers    int           `json:"routing_table_peers"`
+	Enabled              bool           `json:"enabled"`
+	PeerID               string         `json:"peer_id,omitempty"`
+	ListenAddrs          []string       `json:"listen_addrs,omitempty"`
+	ConfiguredBootstrap  int            `json:"configured_bootstrap"`
+	ConfiguredRendezvous int            `json:"configured_rendezvous"`
+	ConnectedBootstrap   int            `json:"connected_bootstrap"`
+	ReachableBootstrap   int            `json:"reachable_bootstrap"`
+	ConnectedPeers       int            `json:"connected_peers"`
+	RoutingTablePeers    int            `json:"routing_table_peers"`
 	MDNS                 SyncMDNSStatus `json:"mdns"`
-	LastBootstrapAt      *time.Time    `json:"last_bootstrap_at,omitempty"`
-	LastError            string        `json:"last_error,omitempty"`
-	Peers                []SyncPeerRef `json:"peers,omitempty"`
+	LastBootstrapAt      *time.Time     `json:"last_bootstrap_at,omitempty"`
+	LastError            string         `json:"last_error,omitempty"`
+	Peers                []SyncPeerRef  `json:"peers,omitempty"`
 }
 
 type SyncMDNSStatus struct {
@@ -65,16 +66,30 @@ type SyncBitTorrentStatus struct {
 	LastError               string `json:"last_error,omitempty"`
 }
 
+type SyncPubSubStatus struct {
+	Enabled             bool       `json:"enabled"`
+	JoinedTopics        []string   `json:"joined_topics,omitempty"`
+	DiscoveryNamespaces []string   `json:"discovery_namespaces,omitempty"`
+	Published           int        `json:"published"`
+	Received            int        `json:"received"`
+	Enqueued            int        `json:"enqueued"`
+	LastTopic           string     `json:"last_topic,omitempty"`
+	LastInfoHash        string     `json:"last_infohash,omitempty"`
+	LastPublishedAt     *time.Time `json:"last_published_at,omitempty"`
+	LastReceivedAt      *time.Time `json:"last_received_at,omitempty"`
+	LastError           string     `json:"last_error,omitempty"`
+}
+
 type SyncActivityStatus struct {
-	QueueRefs     int        `json:"queue_refs"`
-	Imported      int        `json:"imported"`
-	Skipped       int        `json:"skipped"`
-	Failed        int        `json:"failed"`
-	LastRef       string     `json:"last_ref,omitempty"`
-	LastInfoHash  string     `json:"last_infohash,omitempty"`
-	LastStatus    string     `json:"last_status,omitempty"`
-	LastMessage   string     `json:"last_message,omitempty"`
-	LastEventAt   *time.Time `json:"last_event_at,omitempty"`
+	QueueRefs    int        `json:"queue_refs"`
+	Imported     int        `json:"imported"`
+	Skipped      int        `json:"skipped"`
+	Failed       int        `json:"failed"`
+	LastRef      string     `json:"last_ref,omitempty"`
+	LastInfoHash string     `json:"last_infohash,omitempty"`
+	LastStatus   string     `json:"last_status,omitempty"`
+	LastMessage  string     `json:"last_message,omitempty"`
+	LastEventAt  *time.Time `json:"last_event_at,omitempty"`
 }
 
 func syncStatusPath(store *Store) string {
