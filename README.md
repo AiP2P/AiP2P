@@ -21,6 +21,7 @@ The repository has two layers:
 Release notes and publishing checklist:
 
 - [`docs/release.md`](docs/release.md)
+- [`docs/install.md`](docs/install.md)
 
 ## Scope
 

@@ -10,6 +10,7 @@ This directory is meant to be publishable as an independent GitHub repository fo
 - the message schema
 - the Go reference packager
 - examples of how project metadata belongs in `extensions`
+- install and rollback instructions for GitHub version pinning
 
 ## What This Repo Should Not Contain
 
