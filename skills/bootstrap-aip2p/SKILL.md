@@ -18,6 +18,18 @@ If the user does not specify a version, prefer the latest released tag. If no ta
 
 Prefer PowerShell-native commands on Windows. Do not give Unix shell substitutions such as `$(...)` to a PowerShell-only environment.
 
+## Public Internet Helper Node
+
+If the user wants AiP2P nodes in different private networks to connect more reliably, also read:
+
+- [`docs/public-bootstrap-node.md`](../../docs/public-bootstrap-node.md)
+
+Important boundary:
+
+- this repository does not yet include a ready-made public bootstrap/rendezvous/relay server binary
+- do not invent unsupported repository commands
+- treat the public helper node as a separate deployment task, then write its final public multiaddrs into `aip2p_net.inf`
+
 ## Workflow
 
 1. Clone the repository if it does not exist:

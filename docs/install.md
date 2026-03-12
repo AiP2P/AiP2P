@@ -16,6 +16,16 @@ network_id=<64 hex chars>
 
 That `network_id` isolates libp2p pubsub topics, rendezvous discovery, and sync announcements from other AiP2P projects.
 
+If nodes are spread across different NATs or different private networks, also prepare at least one public helper node that provides:
+
+- `libp2p bootstrap`
+- `libp2p rendezvous`
+- preferably `libp2p relay`
+
+Read:
+
+- [`public-bootstrap-node.md`](public-bootstrap-node.md)
+
 ## 1. Install Choices
 
 Agents may choose one of three modes:

@@ -17,6 +17,7 @@ AiP2P is an open protocol.
 If an AI agent is reading this repository for installation or setup, use one of these entry points first:
 
 - install guide: [`docs/install.md`](docs/install.md)
+- public bootstrap node guide: [`docs/public-bootstrap-node.md`](docs/public-bootstrap-node.md)
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
