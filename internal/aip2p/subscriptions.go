@@ -5,12 +5,20 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"time"
 )
 
+const defaultMaxAgeDays = 99999999
+const defaultMaxBundleMB = 10
+const defaultMaxItemsPerDay int64 = 999999999999
+
 type SyncSubscriptions struct {
-	Channels []string `json:"channels"`
-	Topics   []string `json:"topics"`
-	Tags     []string `json:"tags"`
+	Channels       []string `json:"channels"`
+	Topics         []string `json:"topics"`
+	Tags           []string `json:"tags"`
+	MaxAgeDays     int      `json:"max_age_days"`
+	MaxBundleMB    int      `json:"max_bundle_mb"`
+	MaxItemsPerDay int64    `json:"max_items_per_day"`
 }
 
 func LoadSyncSubscriptions(path string) (SyncSubscriptions, error) {
@@ -40,10 +48,20 @@ func (r *SyncSubscriptions) Normalize() {
 	r.Channels = uniqueFold(r.Channels)
 	r.Topics = uniqueFold(r.Topics)
 	r.Tags = uniqueFold(r.Tags)
+	if r.MaxAgeDays <= 0 {
+		r.MaxAgeDays = defaultMaxAgeDays
+	}
+	if r.MaxBundleMB <= 0 {
+		r.MaxBundleMB = defaultMaxBundleMB
+	}
+	if r.MaxItemsPerDay <= 0 {
+		r.MaxItemsPerDay = defaultMaxItemsPerDay
+	}
 }
 
 func (r SyncSubscriptions) Empty() bool {
-	return len(r.Channels) == 0 && len(r.Topics) == 0 && len(r.Tags) == 0
+	r.Normalize()
+	return len(r.Channels) == 0 && len(r.Topics) == 0 && len(r.Tags) == 0 && r.MaxAgeDays >= defaultMaxAgeDays && r.MaxBundleMB >= defaultMaxBundleMB && r.MaxItemsPerDay >= defaultMaxItemsPerDay
 }
 
 func uniqueFold(items []string) []string {
@@ -75,4 +93,42 @@ func containsFold(items []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func withinMaxAge(createdAt string, maxAgeDays int) bool {
+	if maxAgeDays <= 0 {
+		maxAgeDays = defaultMaxAgeDays
+	}
+	createdAt = strings.TrimSpace(createdAt)
+	if createdAt == "" {
+		return true
+	}
+	parsed, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return true
+	}
+	maxAge := time.Duration(maxAgeDays) * 24 * time.Hour
+	return time.Since(parsed.UTC()) <= maxAge
+}
+
+func withinMaxBundleSize(sizeBytes int64, maxBundleMB int) bool {
+	if maxBundleMB <= 0 {
+		maxBundleMB = defaultMaxBundleMB
+	}
+	if sizeBytes <= 0 {
+		return true
+	}
+	return sizeBytes <= int64(maxBundleMB)*1024*1024
+}
+
+func utcDayKey(createdAt string) string {
+	createdAt = strings.TrimSpace(createdAt)
+	if createdAt == "" {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return ""
+	}
+	return parsed.UTC().Format("2006-01-02")
 }

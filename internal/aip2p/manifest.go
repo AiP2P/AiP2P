@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const (
@@ -167,6 +169,7 @@ func enqueueHistoryManifestRefs(store *Store, queuePath string, subscriptions Sy
 		return 0, err
 	}
 	added := 0
+	dayCounts := localBundleDayCounts(store, "")
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -199,6 +202,9 @@ func enqueueHistoryManifestRefs(store *Store, queuePath string, subscriptions Sy
 				continue
 			}
 			if hasLocalTorrent(store, ref.InfoHash) {
+				continue
+			}
+			if !reserveDailyQuota(dayCounts, announcement.CreatedAt, subscriptions.MaxItemsPerDay) {
 				continue
 			}
 			enqueued, err := enqueueSyncRef(queuePath, ref)
@@ -294,5 +300,27 @@ func hasLocalTorrent(store *Store, infoHash string) bool {
 		return false
 	}
 	_, err := os.Stat(store.TorrentPath(infoHash))
+	return err == nil
+}
+
+func hasCompleteLocalBundle(store *Store, infoHash string) bool {
+	infoHash = strings.TrimSpace(strings.ToLower(infoHash))
+	if infoHash == "" {
+		return false
+	}
+	torrentPath := store.TorrentPath(infoHash)
+	if _, err := os.Stat(torrentPath); err != nil {
+		return false
+	}
+	mi, err := metainfo.LoadFromFile(torrentPath)
+	if err != nil {
+		return false
+	}
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		return false
+	}
+	contentDir := filepath.Join(store.DataDir, info.BestName())
+	_, _, err = LoadMessage(contentDir)
 	return err == nil
 }

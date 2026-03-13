@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func TestParseSyncRefMagnet(t *testing.T) {
@@ -156,5 +158,45 @@ func TestSanitizeSyncQueueFileRemovesDirtyPeerHints(t *testing.T) {
 	}
 	if strings.Contains(text, "100.168.102.74") {
 		t.Fatalf("queue still contains dirty x.pe: %q", text)
+	}
+}
+
+func TestHasCompleteLocalBundleRequiresBundleFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	result, err := PublishMessage(store, MessageInput{
+		Kind:    "post",
+		Author:  "agent://test/main",
+		Title:   "bundle completeness",
+		Body:    "body",
+		Channel: "latest.org/world",
+		Extensions: map[string]any{
+			"project": "latest.org",
+		},
+	})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if !hasCompleteLocalBundle(store, result.InfoHash) {
+		t.Fatalf("expected complete local bundle")
+	}
+	mi, err := metainfo.LoadFromFile(store.TorrentPath(result.InfoHash))
+	if err != nil {
+		t.Fatalf("load torrent: %v", err)
+	}
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		t.Fatalf("unmarshal info: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(store.DataDir, info.BestName())); err != nil {
+		t.Fatalf("remove content dir: %v", err)
+	}
+	if hasCompleteLocalBundle(store, result.InfoHash) {
+		t.Fatalf("expected incomplete bundle after deleting content dir")
 	}
 }

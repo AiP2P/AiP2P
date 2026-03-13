@@ -262,7 +262,7 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 		logf("write sync status: %v", err)
 	}
 	for _, ref := range refs {
-		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout, r.netCfg.LANPeers)
+		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout, r.netCfg.LANPeers, r.subscriptions)
 		r.recordResult(result)
 		if result.Status == "imported" || result.Status == "skipped" {
 			if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
@@ -413,10 +413,12 @@ func (r *syncRuntime) handleAnnouncement(announcement SyncAnnouncement) (bool, e
 	if err != nil {
 		return false, err
 	}
-	if _, err := os.Stat(r.store.TorrentPath(ref.InfoHash)); err == nil {
+	if hasCompleteLocalBundle(r.store, ref.InfoHash) {
 		return false, nil
-	} else if err != nil && !os.IsNotExist(err) {
-		return false, err
+	}
+	dayCounts := localBundleDayCounts(r.store, "")
+	if !reserveDailyQuota(dayCounts, announcement.CreatedAt, r.subscriptions.MaxItemsPerDay) {
+		return false, nil
 	}
 	return enqueueSyncRef(r.queuePath, ref)
 }
@@ -434,6 +436,7 @@ func (r *syncRuntime) enqueueHistoryFromLocalManifests(logf func(string, ...any)
 
 func (r *syncRuntime) enqueueHistoryFromLANPeers(ctx context.Context, logf func(string, ...any)) (int, error) {
 	added := 0
+	dayCounts := localBundleDayCounts(r.store, "")
 	for _, peerValue := range r.netCfg.LANPeers {
 		payload, err := fetchLANHistoryManifest(ctx, peerValue, r.netCfg.NetworkID)
 		if err != nil {
@@ -457,7 +460,10 @@ func (r *syncRuntime) enqueueHistoryFromLANPeers(ctx context.Context, logf func(
 			if err != nil || ref.InfoHash == "" {
 				continue
 			}
-			if hasLocalTorrent(r.store, ref.InfoHash) {
+			if hasCompleteLocalBundle(r.store, ref.InfoHash) {
+				continue
+			}
+			if !reserveDailyQuota(dayCounts, announcement.CreatedAt, r.subscriptions.MaxItemsPerDay) {
 				continue
 			}
 			enqueued, err := enqueueSyncRef(r.queuePath, ref)
@@ -949,27 +955,41 @@ func sanitizeQueuedSyncRef(raw string, lanPeers []string) (string, bool, error) 
 	return uri.String(), true, nil
 }
 
-func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string) SyncItemResult {
-	if ref.InfoHash != "" {
-		if _, err := os.Stat(store.TorrentPath(ref.InfoHash)); err == nil {
-			return SyncItemResult{
-				Ref:      ref.Raw,
-				InfoHash: ref.InfoHash,
-				Status:   "skipped",
-				Message:  "torrent already present in local store",
-			}
-		}
-	}
-
+func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string, rules SyncSubscriptions) SyncItemResult {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	t, err := client.AddMagnet(ref.Magnet)
-	if err != nil {
+	var (
+		t   *torrent.Torrent
+		err error
+	)
+	if ref.InfoHash != "" && hasCompleteLocalBundle(store, ref.InfoHash) {
 		return SyncItemResult{
-			Ref:     ref.Raw,
-			Status:  "failed",
-			Message: fmt.Sprintf("add magnet: %v", err),
+			Ref:      ref.Raw,
+			InfoHash: ref.InfoHash,
+			Status:   "skipped",
+			Message:  "bundle already present in local store",
+		}
+	}
+	if ref.InfoHash != "" && hasLocalTorrent(store, ref.InfoHash) {
+		t, err = client.AddTorrentFromFile(store.TorrentPath(ref.InfoHash))
+		if err != nil {
+			return SyncItemResult{
+				Ref:      ref.Raw,
+				InfoHash: ref.InfoHash,
+				Status:   "failed",
+				Message:  fmt.Sprintf("load existing torrent file: %v", err),
+			}
+		}
+	}
+	if t == nil {
+		t, err = client.AddMagnet(ref.Magnet)
+		if err != nil {
+			return SyncItemResult{
+				Ref:     ref.Raw,
+				Status:  "failed",
+				Message: fmt.Sprintf("add magnet: %v", err),
+			}
 		}
 	}
 
@@ -997,6 +1017,15 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 	}
 
 	infoHash := strings.ToLower(t.InfoHash().HexString())
+	if info := t.Info(); info != nil && !withinMaxBundleSize(info.TotalLength(), rules.MaxBundleMB) {
+		t.Drop()
+		return SyncItemResult{
+			Ref:      ref.Raw,
+			InfoHash: infoHash,
+			Status:   "skipped",
+			Message:  fmt.Sprintf("bundle exceeds max_bundle_mb limit (%d MB)", rules.MaxBundleMB),
+		}
+	}
 	t.DownloadAll()
 
 	select {
@@ -1011,12 +1040,25 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 	}
 
 	contentDir := filepath.Join(store.DataDir, t.Name())
-	if _, _, err := LoadMessage(contentDir); err != nil {
+	msg, _, err := LoadMessage(contentDir)
+	if err != nil {
 		return SyncItemResult{
 			Ref:      ref.Raw,
 			InfoHash: infoHash,
 			Status:   "failed",
 			Message:  fmt.Sprintf("validate downloaded bundle: %v", err),
+		}
+	}
+	dayCounts := localBundleDayCounts(store, contentDir)
+	if !reserveDailyQuota(dayCounts, msg.CreatedAt, rules.MaxItemsPerDay) {
+		t.Drop()
+		_ = os.RemoveAll(contentDir)
+		_ = os.Remove(store.TorrentPath(infoHash))
+		return SyncItemResult{
+			Ref:      ref.Raw,
+			InfoHash: infoHash,
+			Status:   "skipped",
+			Message:  fmt.Sprintf("bundle exceeds max_items_per_day limit (%d)", rules.MaxItemsPerDay),
 		}
 	}
 	if err := writeTorrentFile(store.TorrentPath(infoHash), t.Metainfo()); err != nil {

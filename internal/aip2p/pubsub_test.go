@@ -1,6 +1,9 @@
 package aip2p
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSubscribedAnnouncementTopics(t *testing.T) {
 	t.Parallel()
@@ -38,5 +41,37 @@ func TestMatchesAnnouncement(t *testing.T) {
 	}
 	if matchesAnnouncement(announcement, SyncSubscriptions{Topics: []string{"markets"}}) {
 		t.Fatal("unexpected topic match")
+	}
+}
+
+func TestMatchesAnnouncementFiltersByMaxAgeDays(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	announcement := SyncAnnouncement{
+		Channel:   "latest.org/world",
+		CreatedAt: now.Add(-48 * time.Hour).Format(time.RFC3339),
+		Topics:    []string{"world", "pc75"},
+	}
+	if matchesAnnouncement(announcement, SyncSubscriptions{Topics: []string{"all"}, MaxAgeDays: 1}) {
+		t.Fatal("expected stale announcement to be filtered")
+	}
+	if !matchesAnnouncement(announcement, SyncSubscriptions{Topics: []string{"all"}, MaxAgeDays: 3}) {
+		t.Fatal("expected announcement within max age")
+	}
+}
+
+func TestMatchesAnnouncementFiltersByMaxBundleMB(t *testing.T) {
+	t.Parallel()
+
+	announcement := SyncAnnouncement{
+		SizeBytes: 12 * 1024 * 1024,
+		Topics:    []string{"world"},
+	}
+	if matchesAnnouncement(announcement, SyncSubscriptions{Topics: []string{"all"}, MaxBundleMB: 10}) {
+		t.Fatal("expected oversized announcement to be filtered")
+	}
+	if !matchesAnnouncement(announcement, SyncSubscriptions{Topics: []string{"all"}, MaxBundleMB: 20}) {
+		t.Fatal("expected announcement within size limit")
 	}
 }

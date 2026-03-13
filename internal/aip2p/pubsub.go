@@ -32,6 +32,7 @@ type SyncAnnouncement struct {
 	Protocol  string   `json:"protocol"`
 	InfoHash  string   `json:"infohash"`
 	Magnet    string   `json:"magnet"`
+	SizeBytes int64    `json:"size_bytes,omitempty"`
 	Kind      string   `json:"kind,omitempty"`
 	Channel   string   `json:"channel,omitempty"`
 	Title     string   `json:"title,omitempty"`
@@ -432,6 +433,7 @@ func buildAnnouncement(msg Message, mi *metainfo.MetaInfo, info metainfo.Info) S
 	return normalizeAnnouncement(SyncAnnouncement{
 		InfoHash:  strings.ToLower(mi.HashInfoBytes().HexString()),
 		Magnet:    mi.Magnet(nil, &info).String(),
+		SizeBytes: info.TotalLength(),
 		Kind:      msg.Kind,
 		Channel:   msg.Channel,
 		Title:     msg.Title,
@@ -502,6 +504,12 @@ func stringSlice(value any) []string {
 
 func matchesAnnouncement(announcement SyncAnnouncement, rules SyncSubscriptions) bool {
 	rules.Normalize()
+	if !withinMaxAge(announcement.CreatedAt, rules.MaxAgeDays) {
+		return false
+	}
+	if !withinMaxBundleSize(announcement.SizeBytes, rules.MaxBundleMB) {
+		return false
+	}
 	if rules.Empty() {
 		return true
 	}
