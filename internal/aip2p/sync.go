@@ -48,7 +48,7 @@ type SyncItemResult struct {
 
 const (
 	defaultSyncRefTimeout = 20 * time.Second
-	maxSyncRefsPerPass    = 1
+	maxSyncRefsPerPass    = 3
 )
 
 func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) error {
