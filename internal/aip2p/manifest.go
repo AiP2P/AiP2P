@@ -62,7 +62,7 @@ func ensureHistoryManifests(store *Store, netCfg NetworkBootstrapConfig, listenA
 		if announcement.NetworkID == "" {
 			announcement.NetworkID = netCfg.NetworkID
 		}
-		announcement.Magnet = withPeerHints(announcement.Magnet, listenAddrs)
+		announcement.Magnet = withPeerHints(announcement.Magnet, listenAddrs, netCfg.LANPeers)
 		grouped[project] = append(grouped[project], announcement)
 	}
 	for project, entries := range grouped {

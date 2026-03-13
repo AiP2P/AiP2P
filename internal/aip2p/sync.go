@@ -310,7 +310,7 @@ func (r *syncRuntime) announceLocalBundles(ctx context.Context, logf func(string
 		if announcement.NetworkID == "" {
 			announcement.NetworkID = r.netCfg.NetworkID
 		}
-		announcement.Magnet = withPeerHints(announcement.Magnet, r.torrentClient.ListenAddrs())
+		announcement.Magnet = withPeerHints(announcement.Magnet, r.torrentClient.ListenAddrs(), r.netCfg.LANPeers)
 		alwaysPublish := strings.EqualFold(announcement.Kind, historyManifestKind)
 		if !alwaysPublish {
 			r.mu.Lock()
@@ -490,7 +490,7 @@ func removeSyncRef(queuePath string, ref SyncRef) error {
 	return os.WriteFile(queuePath, []byte(content), 0o644)
 }
 
-func withPeerHints(magnet string, addrs []net.Addr) string {
+func withPeerHints(magnet string, addrs []net.Addr, lanPeers []string) string {
 	if strings.TrimSpace(magnet) == "" || len(addrs) == 0 {
 		return magnet
 	}
@@ -514,7 +514,7 @@ func withPeerHints(magnet string, addrs []net.Addr) string {
 	if len(ports) == 0 {
 		return magnet
 	}
-	hosts := localPeerHosts()
+	hosts := localPeerHosts(lanPeers)
 	for port := range ports {
 		for _, host := range hosts {
 			peerAddr := net.JoinHostPort(host, port)
@@ -529,11 +529,11 @@ func withPeerHints(magnet string, addrs []net.Addr) string {
 	return uri.String()
 }
 
-func localPeerHosts() []string {
-	out := []string{"127.0.0.1"}
-	seen := map[string]struct{}{
-		"127.0.0.1": {},
-	}
+func localPeerHosts(lanPeers []string) []string {
+	out := make([]string, 0, 4)
+	seen := make(map[string]struct{})
+	preferredSubnets := privateIPv4Subnets(lanPeers)
+	fallback := make([]string, 0, 4)
 	ifaces, err := net.InterfaceAddrs()
 	if err != nil {
 		return out
@@ -548,13 +548,23 @@ func localPeerHosts() []string {
 			continue
 		}
 		if ip4 := ip.To4(); ip4 != nil {
+			if !isRFC1918IPv4(ip4) {
+				continue
+			}
 			text := ip4.String()
 			if _, ok := seen[text]; ok {
 				continue
 			}
 			seen[text] = struct{}{}
-			out = append(out, text)
+			if len(preferredSubnets) == 0 || matchesAnyPrivateSubnet(ip4, preferredSubnets) {
+				out = append(out, text)
+				continue
+			}
+			fallback = append(fallback, text)
 		}
+	}
+	if len(out) == 0 {
+		out = append(out, fallback...)
 	}
 	return out
 }
