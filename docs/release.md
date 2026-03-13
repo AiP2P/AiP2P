@@ -26,7 +26,7 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.16-draft`
+- `v0.2.1-draft`
 
 Suggested release message:
 

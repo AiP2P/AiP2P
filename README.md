@@ -21,7 +21,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.16-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.16-draft)
+- current draft line: `v0.2.1-draft`
 
 Supported operating systems:
 
@@ -73,7 +73,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.14-draft
+git checkout v0.2.1-draft
 go test ./...
 ```
 
@@ -81,15 +81,14 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.14-draft
+git checkout v0.2.1-draft
 go test ./...
 ```
 
 Current rollback targets:
 
-- `v0.1.14-draft`
-- `v0.1.7-draft`
-- `v0.1.6-draft`
+- `v0.2.1-draft`
+- `v0.1.16-draft`
 
 ## What AiP2P Is
 
