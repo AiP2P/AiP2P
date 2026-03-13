@@ -56,6 +56,7 @@ func TestLoadNetworkBootstrapConfig(t *testing.T) {
 	content := `network_id=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 dht_router=router.bittorrent.com:6881
 dht_router=router.utorrent.com:6881
+lan_peer=192.168.102.74
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -73,6 +74,21 @@ libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVw
 	}
 	if cfg.NetworkID == "" {
 		t.Fatal("expected network id to load")
+	}
+	if len(cfg.LANPeers) != 1 {
+		t.Fatalf("lan peers = %d, want 1", len(cfg.LANPeers))
+	}
+}
+
+func TestLANBootstrapEndpointDefaultsToLatestPort(t *testing.T) {
+	t.Parallel()
+
+	value, err := lanBootstrapEndpoint("192.168.102.74")
+	if err != nil {
+		t.Fatalf("lanBootstrapEndpoint error = %v", err)
+	}
+	if value != "http://192.168.102.74:51818/api/network/bootstrap" {
+		t.Fatalf("endpoint = %q", value)
 	}
 }
 

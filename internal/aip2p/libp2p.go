@@ -25,11 +25,12 @@ type libp2pRuntime struct {
 	mdnsServiceName    string
 	bootstraps         []peer.AddrInfo
 	rendezvous         []string
+	bootstrapWarning   string
 	lastBootstrappedAt *time.Time
 }
 
 func startLibP2PRuntime(ctx context.Context, cfg NetworkBootstrapConfig) (*libp2pRuntime, error) {
-	if len(cfg.LibP2PBootstrap) == 0 && len(cfg.LibP2PRendezvous) == 0 {
+	if len(cfg.LibP2PBootstrap) == 0 && len(cfg.LibP2PRendezvous) == 0 && len(cfg.LANPeers) == 0 {
 		return nil, nil
 	}
 
@@ -40,7 +41,10 @@ func startLibP2PRuntime(ctx context.Context, cfg NetworkBootstrapConfig) (*libp2
 		return nil, fmt.Errorf("create libp2p host: %w", err)
 	}
 
-	peers, err := parseBootstrapPeers(cfg.LibP2PBootstrap)
+	bootstrapValues := append([]string(nil), cfg.LibP2PBootstrap...)
+	resolvedLANPeers, lanErr := resolveLANBootstrapPeers(ctx, cfg)
+	bootstrapValues = append(bootstrapValues, resolvedLANPeers...)
+	peers, err := parseBootstrapPeers(bootstrapValues)
 	if err != nil {
 		_ = h.Close()
 		return nil, err
@@ -70,15 +74,21 @@ func startLibP2PRuntime(ctx context.Context, cfg NetworkBootstrapConfig) (*libp2
 	}
 	now := time.Now().UTC()
 	return &libp2pRuntime{
-		host:               h,
-		dht:                dht,
-		ping:               ping.NewPingService(h),
-		mdns:               mdnsService,
-		mdnsTracker:        mdnsTracker,
-		networkID:          cfg.NetworkID,
-		mdnsServiceName:    serviceName,
-		bootstraps:         peers,
-		rendezvous:         append([]string(nil), cfg.LibP2PRendezvous...),
+		host:            h,
+		dht:             dht,
+		ping:            ping.NewPingService(h),
+		mdns:            mdnsService,
+		mdnsTracker:     mdnsTracker,
+		networkID:       cfg.NetworkID,
+		mdnsServiceName: serviceName,
+		bootstraps:      peers,
+		rendezvous:      append([]string(nil), cfg.LibP2PRendezvous...),
+		bootstrapWarning: func() string {
+			if lanErr != nil {
+				return lanErr.Error()
+			}
+			return ""
+		}(),
 		lastBootstrappedAt: &now,
 	}, nil
 }
@@ -114,6 +124,9 @@ func (r *libp2pRuntime) Status(ctx context.Context) SyncLibP2PStatus {
 			ServiceName: r.mdnsServiceName,
 		},
 		LastBootstrapAt: r.lastBootstrappedAt,
+	}
+	if r.bootstrapWarning != "" {
+		status.LastError = r.bootstrapWarning
 	}
 	for _, addr := range r.host.Addrs() {
 		status.ListenAddrs = append(status.ListenAddrs, addr.String())

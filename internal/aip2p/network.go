@@ -26,6 +26,7 @@ func defaultNetworkBootstrapConfig(path string) (string, error) {
 #   network_id=<64 hex chars>
 #   libp2p_listen=/ip4/.../tcp/<port>
 #   bittorrent_listen=0.0.0.0:<port>
+#   lan_peer=<host-or-ip>
 #   libp2p_bootstrap=/dnsaddr/.../p2p/<peer-id>
 #   libp2p_rendezvous=latest.org/<topic>
 #   dht_router=host:port
@@ -35,6 +36,10 @@ network_id=%s
 libp2p_listen=/ip4/0.0.0.0/tcp/%d
 libp2p_listen=/ip4/0.0.0.0/udp/%d/quic-v1
 bittorrent_listen=0.0.0.0:%d
+
+# Optional LAN anchor. AiP2P will query http://<lan_peer>:51818/api/network/bootstrap
+# so a plain IP can become a dialable libp2p peer with the current peer_id and listen ports.
+lan_peer=192.168.102.74
 
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
@@ -55,6 +60,7 @@ type NetworkBootstrapConfig struct {
 	NetworkID        string
 	BitTorrentListen string
 	LibP2PListen     []string
+	LANPeers         []string
 	DHTRouters       []string
 	LibP2PBootstrap  []string
 	LibP2PRendezvous []string
@@ -77,6 +83,7 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 		Exists: true,
 	}
 	seenListen := make(map[string]struct{})
+	seenLAN := make(map[string]struct{})
 	seenDHT := make(map[string]struct{})
 	seenLibP2P := make(map[string]struct{})
 	seenRendezvous := make(map[string]struct{})
@@ -109,6 +116,12 @@ func LoadNetworkBootstrapConfig(path string) (NetworkBootstrapConfig, error) {
 			}
 			seenListen[value] = struct{}{}
 			cfg.LibP2PListen = append(cfg.LibP2PListen, value)
+		case "lan_peer":
+			if _, ok := seenLAN[value]; ok {
+				continue
+			}
+			seenLAN[value] = struct{}{}
+			cfg.LANPeers = append(cfg.LANPeers, value)
 		case "dht_router":
 			if _, ok := seenDHT[value]; ok {
 				continue
