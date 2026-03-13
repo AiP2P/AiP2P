@@ -26,7 +26,7 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.11-draft`
+- `v0.1.12-draft`
 
 Suggested release message:
 
@@ -42,6 +42,7 @@ Suggested release message:
 - failed queue refs rotate to the tail so one stale ref cannot monopolize the sync loop
 - queue processing now prioritizes direct article refs ahead of `history-manifest` backfill refs
 - terminal `404` torrent fallback failures are dropped from the queue instead of retrying forever
+- stable LAN peer history list fetch for backfilling older refs without depending on rolling manifest churn
 
 ## Pre-Publish Checklist
 

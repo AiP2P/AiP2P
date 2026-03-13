@@ -296,6 +296,11 @@ func (r *syncRuntime) reconcileQueue(ctx context.Context, direct []string, timeo
 	} else if changed > 0 && logf != nil {
 		logf("sanitized %d queued magnet refs", changed)
 	}
+	if added, err := r.enqueueHistoryFromLANPeers(ctx, logf); err != nil {
+		return err
+	} else if added > 0 && logf != nil {
+		logf("lan history head queued %d refs", added)
+	}
 	for round := 0; round < 3; round++ {
 		if err := r.processQueue(ctx, direct, timeout, logf); err != nil {
 			return err
@@ -423,6 +428,46 @@ func (r *syncRuntime) enqueueHistoryFromLocalManifests(logf func(string, ...any)
 	}
 	if added > 0 && logf != nil {
 		logf("history manifest queued %d refs", added)
+	}
+	return added, nil
+}
+
+func (r *syncRuntime) enqueueHistoryFromLANPeers(ctx context.Context, logf func(string, ...any)) (int, error) {
+	added := 0
+	for _, peerValue := range r.netCfg.LANPeers {
+		payload, err := fetchLANHistoryManifest(ctx, peerValue, r.netCfg.NetworkID)
+		if err != nil {
+			if logf != nil {
+				logf("fetch lan history manifest from %s: %v", peerValue, err)
+			}
+			continue
+		}
+		for _, announcement := range payload.Entries {
+			announcement = normalizeAnnouncement(announcement)
+			if announcement.NetworkID == "" {
+				announcement.NetworkID = payload.NetworkID
+			}
+			if r.netCfg.NetworkID != "" && announcement.NetworkID != "" && !strings.EqualFold(announcement.NetworkID, r.netCfg.NetworkID) {
+				continue
+			}
+			if !matchesAnnouncement(announcement, r.subscriptions) {
+				continue
+			}
+			ref, err := syncRefFromAnnouncement(announcement)
+			if err != nil || ref.InfoHash == "" {
+				continue
+			}
+			if hasLocalTorrent(r.store, ref.InfoHash) {
+				continue
+			}
+			enqueued, err := enqueueSyncRef(r.queuePath, ref)
+			if err != nil {
+				return added, err
+			}
+			if enqueued {
+				added++
+			}
+		}
 	}
 	return added, nil
 }

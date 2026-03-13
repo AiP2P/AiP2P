@@ -93,6 +93,18 @@ func TestLANBootstrapEndpointDefaultsToLatestPort(t *testing.T) {
 	}
 }
 
+func TestLANHistoryManifestEndpointDefaultsToLatestPort(t *testing.T) {
+	t.Parallel()
+
+	value, err := lanHistoryManifestEndpoint("192.168.102.74")
+	if err != nil {
+		t.Fatalf("lanHistoryManifestEndpoint error = %v", err)
+	}
+	if value != "http://192.168.102.74:51818/api/history/list" {
+		t.Fatalf("endpoint = %q", value)
+	}
+}
+
 func TestRemoveSyncRef(t *testing.T) {
 	t.Parallel()
 

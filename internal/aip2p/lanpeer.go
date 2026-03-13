@@ -18,6 +18,16 @@ type lanBootstrapResponse struct {
 	DialAddrs []string `json:"dial_addrs"`
 }
 
+type lanHistoryManifestResponse struct {
+	Project          string             `json:"project"`
+	Version          string             `json:"version"`
+	NetworkID        string             `json:"network_id"`
+	ManifestInfoHash string             `json:"manifest_infohash"`
+	GeneratedAt      string             `json:"generated_at"`
+	EntryCount       int                `json:"entry_count"`
+	Entries          []SyncAnnouncement `json:"entries"`
+}
+
 func resolveLANBootstrapPeers(ctx context.Context, cfg NetworkBootstrapConfig) ([]string, error) {
 	out := make([]string, 0, len(cfg.LANPeers))
 	var errs []string
@@ -114,6 +124,66 @@ func lanBootstrapEndpoint(value string) (string, error) {
 	u.Scheme = "http"
 	u.Host = host
 	u.Path = "/api/network/bootstrap"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func fetchLANHistoryManifest(ctx context.Context, value, expectedNetworkID string) (lanHistoryManifestResponse, error) {
+	endpoint, err := lanHistoryManifestEndpoint(value)
+	if err != nil {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q: %w", value, err)
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q request: %w", value, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q query %s: %w", value, endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q query %s: status %d", value, endpoint, resp.StatusCode)
+	}
+	var payload lanHistoryManifestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q decode history manifest payload: %w", value, err)
+	}
+	if normalizeNetworkID(expectedNetworkID) != "" && payload.NetworkID != "" && payload.NetworkID != expectedNetworkID {
+		return lanHistoryManifestResponse{}, fmt.Errorf("lan_peer %q reported network_id %s, want %s", value, payload.NetworkID, expectedNetworkID)
+	}
+	return payload, nil
+}
+
+func lanHistoryManifestEndpoint(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("empty lan_peer")
+	}
+	if !strings.Contains(value, "://") {
+		value = "http://" + value
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return "", err
+	}
+	host := strings.TrimSpace(u.Host)
+	if host == "" {
+		host = strings.TrimSpace(u.Path)
+		u.Path = ""
+	}
+	if host == "" {
+		return "", fmt.Errorf("missing host")
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		host = net.JoinHostPort(strings.Trim(host, "[]"), "51818")
+	}
+	u.Scheme = "http"
+	u.Host = host
+	u.Path = "/api/history/list"
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String(), nil
