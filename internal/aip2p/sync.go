@@ -269,7 +269,11 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 				logf("remove sync ref: %v", err)
 			}
 		} else if result.Status == "failed" {
-			if err := rotateSyncRef(r.queuePath, ref); err != nil && logf != nil {
+			if isTerminalSyncFailure(ref, result) {
+				if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
+					logf("drop terminal sync ref: %v", err)
+				}
+			} else if err := rotateSyncRef(r.queuePath, ref); err != nil && logf != nil {
 				logf("rotate failed sync ref: %v", err)
 			}
 		}
@@ -542,6 +546,17 @@ func isHistoryManifestRef(ref SyncRef) bool {
 		return false
 	}
 	return strings.Contains(strings.ToLower(uri.Query().Get("dn")), "history-manifest")
+}
+
+func isTerminalSyncFailure(ref SyncRef, result SyncItemResult) bool {
+	message := strings.ToLower(strings.TrimSpace(result.Message))
+	if !strings.Contains(message, "status 404") {
+		return false
+	}
+	if isHistoryManifestRef(ref) {
+		return true
+	}
+	return strings.Contains(message, "/api/torrents/")
 }
 
 func withPeerHints(magnet string, addrs []net.Addr, lanPeers []string) string {
