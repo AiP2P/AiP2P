@@ -273,6 +273,11 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 }
 
 func (r *syncRuntime) reconcileQueue(ctx context.Context, direct []string, timeout time.Duration, logf func(string, ...any)) error {
+	if changed, err := sanitizeSyncQueueFile(r.queuePath, r.netCfg.LANPeers); err != nil {
+		return err
+	} else if changed > 0 && logf != nil {
+		logf("sanitized %d queued magnet refs", changed)
+	}
 	for round := 0; round < 3; round++ {
 		if err := r.processQueue(ctx, direct, timeout, logf); err != nil {
 			return err
@@ -759,6 +764,80 @@ func ParseSyncRef(raw string) (SyncRef, error) {
 		}, nil
 	}
 	return SyncRef{}, fmt.Errorf("unsupported sync ref %q", raw)
+}
+
+func sanitizeSyncQueueFile(queuePath string, lanPeers []string) (int, error) {
+	queuePath = strings.TrimSpace(queuePath)
+	if queuePath == "" {
+		return 0, nil
+	}
+	data, err := os.ReadFile(queuePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	lines := strings.Split(string(data), "\n")
+	changed := 0
+	for i, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "//") {
+			continue
+		}
+		sanitized, lineChanged, err := sanitizeQueuedSyncRef(line, lanPeers)
+		if err != nil {
+			return changed, fmt.Errorf("sanitize queue line %d: %w", i+1, err)
+		}
+		if !lineChanged {
+			continue
+		}
+		lines[i] = sanitized
+		changed++
+	}
+	if changed == 0 {
+		return 0, nil
+	}
+	content := strings.Join(lines, "\n")
+	return changed, os.WriteFile(queuePath, []byte(content), 0o644)
+}
+
+func sanitizeQueuedSyncRef(raw string, lanPeers []string) (string, bool, error) {
+	ref, err := ParseSyncRef(raw)
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(ref.Magnet) == "" {
+		return raw, false, nil
+	}
+	uri, err := url.Parse(ref.Magnet)
+	if err != nil {
+		return "", false, fmt.Errorf("parse magnet: %w", err)
+	}
+	query := uri.Query()
+	values := query["x.pe"]
+	if len(values) == 0 {
+		return raw, false, nil
+	}
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		host, _, err := net.SplitHostPort(value)
+		if err != nil {
+			continue
+		}
+		if allowTorrentHTTPHost(host, lanPeers) {
+			kept = append(kept, value)
+		}
+	}
+	if len(kept) == len(values) {
+		return raw, false, nil
+	}
+	delete(query, "x.pe")
+	for _, value := range kept {
+		query.Add("x.pe", value)
+	}
+	uri.RawQuery = query.Encode()
+	return uri.String(), true, nil
 }
 
 func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string) SyncItemResult {

@@ -3,6 +3,7 @@ package aip2p
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -114,5 +115,34 @@ func TestRemoveSyncRef(t *testing.T) {
 	}
 	if string(data) != "# magnet:?xt=urn:btih:...\n" {
 		t.Fatalf("queue contents = %q", string(data))
+	}
+}
+
+func TestSanitizeSyncQueueFileRemovesDirtyPeerHints(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	queue := filepath.Join(root, "magnets.txt")
+	content := "# magnet:?xt=urn:btih:...\nmagnet:?xt=urn:btih:93a71a010a59022c8670e06e2c92fa279f98d974&x.pe=192.168.102.74:55369&x.pe=100.168.102.74:55369\n"
+	if err := os.WriteFile(queue, []byte(content), 0o644); err != nil {
+		t.Fatalf("write queue: %v", err)
+	}
+	changed, err := sanitizeSyncQueueFile(queue, []string{"192.168.102.74"})
+	if err != nil {
+		t.Fatalf("sanitize queue: %v", err)
+	}
+	if changed != 1 {
+		t.Fatalf("changed = %d, want 1", changed)
+	}
+	data, err := os.ReadFile(queue)
+	if err != nil {
+		t.Fatalf("read queue: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "x.pe=192.168.102.74%3A55369") {
+		t.Fatalf("queue missing LAN peer: %q", text)
+	}
+	if strings.Contains(text, "100.168.102.74") {
+		t.Fatalf("queue still contains dirty x.pe: %q", text)
 	}
 }
