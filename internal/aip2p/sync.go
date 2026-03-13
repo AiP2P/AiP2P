@@ -44,6 +44,11 @@ type SyncItemResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
+const (
+	defaultSyncRefTimeout = 20 * time.Second
+	maxSyncRefsPerPass    = 1
+)
+
 func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) error {
 	store, err := OpenStore(opts.StoreRoot)
 	if err != nil {
@@ -57,7 +62,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		opts.PollInterval = 30 * time.Second
 	}
 	if opts.Timeout <= 0 {
-		opts.Timeout = 10 * time.Minute
+		opts.Timeout = defaultSyncRefTimeout
 	}
 	if err := ensureNetworkID(opts.NetPath, latestOrgNetworkID); err != nil {
 		return fmt.Errorf("ensure latest.org network id: %w", err)
@@ -142,14 +147,14 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
 			logf("seed local torrents: %v", err)
 		}
+		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
+			logf("announce local bundles: %v", err)
+		}
 		if err := runtime.reconcileQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
 			return err
 		}
 		if runtime.queueRefs() == 0 {
 			return errors.New("no magnet or infohash refs found")
-		}
-		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
-			logf("announce local bundles: %v", err)
 		}
 		return nil
 	}
@@ -160,11 +165,11 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		if err := runtime.seedLocalTorrents(logf); err != nil && logf != nil {
 			logf("seed local torrents: %v", err)
 		}
-		if err := runtime.reconcileQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
-			return err
-		}
 		if err := runtime.announceLocalBundles(ctx, logf); err != nil && logf != nil {
 			logf("announce local bundles: %v", err)
+		}
+		if err := runtime.reconcileQueue(ctx, opts.Refs, opts.Timeout, logf); err != nil {
+			return err
 		}
 		select {
 		case <-ctx.Done():
@@ -246,6 +251,9 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 	refs, err := collectSyncRefs(direct, r.queuePath)
 	if err != nil {
 		return err
+	}
+	if len(refs) > maxSyncRefsPerPass {
+		refs = refs[:maxSyncRefsPerPass]
 	}
 	r.setQueueRefs(len(refs))
 	if err := r.writeStatus(ctx); err != nil && logf != nil {

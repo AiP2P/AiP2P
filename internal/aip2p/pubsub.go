@@ -149,7 +149,10 @@ func (r *pubsubRuntime) PublishAnnouncement(ctx context.Context, announcement Sy
 			r.recordError(err)
 			return err
 		}
-		if err := topic.Publish(ctx, body); err != nil {
+		publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err = topic.Publish(publishCtx, body)
+		cancel()
+		if err != nil {
 			r.recordError(err)
 			return fmt.Errorf("publish to %s: %w", topicName, err)
 		}
