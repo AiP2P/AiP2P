@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -252,6 +253,7 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 	if err != nil {
 		return err
 	}
+	sortSyncRefsByPriority(refs)
 	if len(refs) > maxSyncRefsPerPass {
 		refs = refs[:maxSyncRefsPerPass]
 	}
@@ -513,6 +515,33 @@ func rotateSyncRef(queuePath string, ref SyncRef) error {
 	}
 	_, err := enqueueSyncRef(queuePath, ref)
 	return err
+}
+
+func sortSyncRefsByPriority(refs []SyncRef) {
+	sort.SliceStable(refs, func(i, j int) bool {
+		return syncRefPriority(refs[i]) < syncRefPriority(refs[j])
+	})
+}
+
+func syncRefPriority(ref SyncRef) int {
+	if isHistoryManifestRef(ref) {
+		return 1
+	}
+	return 0
+}
+
+func isHistoryManifestRef(ref SyncRef) bool {
+	if strings.Contains(strings.ToLower(ref.Raw), "history-manifest") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(ref.Magnet), "history-manifest") {
+		return true
+	}
+	uri, err := url.Parse(strings.TrimSpace(ref.Magnet))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(uri.Query().Get("dn")), "history-manifest")
 }
 
 func withPeerHints(magnet string, addrs []net.Addr, lanPeers []string) string {
