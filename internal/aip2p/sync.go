@@ -266,6 +266,10 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 			if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
 				logf("remove sync ref: %v", err)
 			}
+		} else if result.Status == "failed" {
+			if err := rotateSyncRef(r.queuePath, ref); err != nil && logf != nil {
+				logf("rotate failed sync ref: %v", err)
+			}
 		}
 		if err := r.writeStatus(ctx); err != nil && logf != nil {
 			logf("write sync status: %v", err)
@@ -501,6 +505,14 @@ func removeSyncRef(queuePath string, ref SyncRef) error {
 	}
 	content := strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
 	return os.WriteFile(queuePath, []byte(content), 0o644)
+}
+
+func rotateSyncRef(queuePath string, ref SyncRef) error {
+	if err := removeSyncRef(queuePath, ref); err != nil {
+		return err
+	}
+	_, err := enqueueSyncRef(queuePath, ref)
+	return err
 }
 
 func withPeerHints(magnet string, addrs []net.Addr, lanPeers []string) string {

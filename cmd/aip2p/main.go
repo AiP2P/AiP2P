@@ -151,7 +151,7 @@ func runSync(args []string) error {
 	listenAddr := fs.String("listen", "0.0.0.0:0", "bittorrent listen address")
 	magnets := fs.String("magnet", "", "comma-separated magnets or infohashes to sync immediately")
 	poll := fs.Duration("poll", 30*time.Second, "queue polling interval")
-	timeout := fs.Duration("timeout", 10*time.Minute, "per-ref sync timeout")
+	timeout := fs.Duration("timeout", 20*time.Second, "per-ref sync timeout")
 	once := fs.Bool("once", false, "run one sync pass and exit")
 	seed := fs.Bool("seed", true, "seed after download while daemon is running")
 	if err := fs.Parse(args); err != nil {

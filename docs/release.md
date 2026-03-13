@@ -26,7 +26,7 @@ Those belong in downstream projects such as `latest.org`.
 
 Suggested first release label:
 
-- `v0.1.8-draft`
+- `v0.1.9-draft`
 
 Suggested release message:
 
@@ -39,6 +39,7 @@ Suggested release message:
 - history manifest generation plus BitTorrent backfill for later-joining nodes
 - announce-before-backlog sync ordering for faster live publication
 - short pubsub publish timeout and bounded queue slices so old backlog does not stall new refs
+- failed queue refs rotate to the tail so one stale ref cannot monopolize the sync loop
 
 ## Pre-Publish Checklist
 
