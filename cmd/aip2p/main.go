@@ -147,6 +147,7 @@ func runSync(args []string) error {
 	storeRoot := fs.String("store", ".aip2p", "store root")
 	queuePath := fs.String("queue", "", "line-based magnet/infohash queue file")
 	netPath := fs.String("net", "./aip2p_net.inf", "network bootstrap config")
+	trackersPath := fs.String("trackers", "", "tracker list file; defaults to Trackerlist.inf next to the net config")
 	subscriptionsPath := fs.String("subscriptions", "", "subscription rules file for pubsub topic joins")
 	listenAddr := fs.String("listen", "0.0.0.0:0", "bittorrent listen address")
 	magnets := fs.String("magnet", "", "comma-separated magnets or infohashes to sync immediately")
@@ -165,6 +166,7 @@ func runSync(args []string) error {
 		StoreRoot:         *storeRoot,
 		QueuePath:         *queuePath,
 		NetPath:           *netPath,
+		TrackerListPath:   *trackersPath,
 		SubscriptionsPath: *subscriptionsPath,
 		ListenAddr:        *listenAddr,
 		Refs:              splitCSV(*magnets),

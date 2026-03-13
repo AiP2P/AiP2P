@@ -22,6 +22,7 @@ type SyncOptions struct {
 	StoreRoot         string
 	QueuePath         string
 	NetPath           string
+	TrackerListPath   string
 	SubscriptionsPath string
 	ListenAddr        string
 	Refs              []string
@@ -65,6 +66,12 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	if opts.Timeout <= 0 {
 		opts.Timeout = defaultSyncRefTimeout
 	}
+	if strings.TrimSpace(opts.TrackerListPath) == "" {
+		opts.TrackerListPath = defaultTrackerListPath(opts.NetPath)
+	}
+	if err := EnsureDefaultTrackerList(opts.TrackerListPath); err != nil {
+		return fmt.Errorf("ensure tracker list: %w", err)
+	}
 	if err := ensureNetworkID(opts.NetPath, latestOrgNetworkID); err != nil {
 		return fmt.Errorf("ensure latest.org network id: %w", err)
 	}
@@ -81,6 +88,10 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	subscriptions, err := LoadSyncSubscriptions(opts.SubscriptionsPath)
 	if err != nil {
 		return fmt.Errorf("load subscriptions: %w", err)
+	}
+	trackers, err := LoadTrackerList(opts.TrackerListPath)
+	if err != nil {
+		return fmt.Errorf("load tracker list: %w", err)
 	}
 	dhtRouters, err := resolveEffectiveDHTRouters(ctx, netCfg)
 	if err != nil && logf != nil {
@@ -129,6 +140,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		torrentClient: client,
 		libp2p:        libp2pRuntime,
 		netCfg:        netCfg,
+		trackers:      trackers,
 		subscriptions: subscriptions,
 		announced:     make(map[string]struct{}),
 		seeded:        make(map[string]struct{}),
@@ -203,6 +215,7 @@ type syncRuntime struct {
 	libp2p        *libp2pRuntime
 	pubsub        *pubsubRuntime
 	netCfg        NetworkBootstrapConfig
+	trackers      []string
 	subscriptions SyncSubscriptions
 	announced     map[string]struct{}
 	seeded        map[string]struct{}
@@ -274,7 +287,7 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 		logf("write sync status: %v", err)
 	}
 	for _, ref := range refs {
-		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout, r.netCfg.LANPeers, r.subscriptions)
+		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout, r.netCfg.LANPeers, r.trackers, r.subscriptions)
 		r.recordResult(result)
 		if result.Status == "imported" || result.Status == "skipped" {
 			if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
@@ -1019,7 +1032,7 @@ func sanitizeQueuedSyncRef(raw string, lanPeers []string) (string, bool, error) 
 	return uri.String(), true, nil
 }
 
-func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string, rules SyncSubscriptions) SyncItemResult {
+func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string, trackers []string, rules SyncSubscriptions) SyncItemResult {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -1036,7 +1049,7 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 		}
 	}
 	if ref.InfoHash != "" && hasLocalTorrent(store, ref.InfoHash) {
-		t, err = client.AddTorrentFromFile(store.TorrentPath(ref.InfoHash))
+		t, err = addTorrentFileWithTrackers(client, store.TorrentPath(ref.InfoHash), trackers)
 		if err != nil {
 			return SyncItemResult{
 				Ref:      ref.Raw,
@@ -1047,7 +1060,7 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 		}
 	}
 	if t == nil {
-		t, err = client.AddMagnet(ref.Magnet)
+		t, err = addMagnetWithTrackers(client, ref.Magnet, trackers)
 		if err != nil {
 			return SyncItemResult{
 				Ref:     ref.Raw,
@@ -1068,7 +1081,7 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 				Message:  "timed out waiting for metadata; torrent fallback failed: " + fallbackErr.Error(),
 			}
 		}
-		t, err = client.AddTorrentFromFile(path)
+		t, err = addTorrentFileWithTrackers(client, path, trackers)
 		if err != nil {
 			return SyncItemResult{
 				Ref:      ref.Raw,

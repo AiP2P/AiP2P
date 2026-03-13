@@ -201,6 +201,27 @@ func TestResolveEffectiveDHTRoutersPrefersLANBTAnchors(t *testing.T) {
 	}
 }
 
+func TestLoadTrackerListParsesDefaultStyleFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "Trackerlist.inf")
+	content := "# comment\ntracker=https://tracker.example.com/announce\nudp://tracker.opentrackr.org:1337/announce\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write tracker list: %v", err)
+	}
+	trackers, err := LoadTrackerList(path)
+	if err != nil {
+		t.Fatalf("LoadTrackerList error = %v", err)
+	}
+	if len(trackers) != 2 {
+		t.Fatalf("trackers len = %d, want 2", len(trackers))
+	}
+	if trackers[0] != "https://tracker.example.com/announce" {
+		t.Fatalf("first tracker = %q", trackers[0])
+	}
+}
+
 func TestHasCompleteLocalBundleRequiresBundleFiles(t *testing.T) {
 	t.Parallel()
 
