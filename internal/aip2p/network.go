@@ -9,6 +9,7 @@ import (
 )
 
 const latestOrgNetworkID = "b2090347cee0ff1a577b1101d4adbd664c309932d3c2578971c11997fdd2164e"
+const defaultLANPeer = "192.168.102.74"
 
 func defaultNetworkBootstrapConfig(path string) (string, error) {
 	libp2pPort, err := pickFreeTCPAndUDPPort()
@@ -209,5 +210,31 @@ func ensureNetworkID(path, networkID string) error {
 	body := strings.TrimRight(string(data), "\n")
 	body += "\n\n# Stable 256-bit AiP2P network namespace for latest.org.\n"
 	body += "network_id=" + networkID + "\n"
+	return os.WriteFile(path, []byte(body), 0o644)
+}
+
+func ensureLANPeer(path, lanPeer string) error {
+	path = strings.TrimSpace(path)
+	lanPeer = strings.TrimSpace(lanPeer)
+	if path == "" || lanPeer == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	cfg, err := LoadNetworkBootstrapConfig(path)
+	if err != nil {
+		return err
+	}
+	if len(cfg.LANPeers) > 0 {
+		return nil
+	}
+	body := strings.TrimRight(string(data), "\n")
+	body += "\n\n# Optional LAN anchor for faster local discovery.\n"
+	body += "lan_peer=" + lanPeer + "\n"
 	return os.WriteFile(path, []byte(body), 0o644)
 }

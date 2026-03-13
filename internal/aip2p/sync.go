@@ -59,6 +59,12 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	if opts.Timeout <= 0 {
 		opts.Timeout = 10 * time.Minute
 	}
+	if err := ensureNetworkID(opts.NetPath, latestOrgNetworkID); err != nil {
+		return fmt.Errorf("ensure latest.org network id: %w", err)
+	}
+	if err := ensureLANPeer(opts.NetPath, defaultLANPeer); err != nil {
+		return fmt.Errorf("ensure lan peer: %w", err)
+	}
 	netCfg, err := LoadNetworkBootstrapConfig(opts.NetPath)
 	if err != nil {
 		return fmt.Errorf("load network bootstrap config: %w", err)
@@ -246,7 +252,7 @@ func (r *syncRuntime) processQueue(ctx context.Context, direct []string, timeout
 		logf("write sync status: %v", err)
 	}
 	for _, ref := range refs {
-		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout)
+		result := syncRef(ctx, r.torrentClient, r.store, ref, timeout, r.netCfg.LANPeers)
 		r.recordResult(result)
 		if result.Status == "imported" || result.Status == "skipped" {
 			if err := removeSyncRef(r.queuePath, ref); err != nil && logf != nil {
@@ -745,7 +751,7 @@ func ParseSyncRef(raw string) (SyncRef, error) {
 	return SyncRef{}, fmt.Errorf("unsupported sync ref %q", raw)
 }
 
-func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration) SyncItemResult {
+func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref SyncRef, timeout time.Duration, lanPeers []string) SyncItemResult {
 	if ref.InfoHash != "" {
 		if _, err := os.Stat(store.TorrentPath(ref.InfoHash)); err == nil {
 			return SyncItemResult{
@@ -771,11 +777,23 @@ func syncRef(ctx context.Context, client *torrent.Client, store *Store, ref Sync
 
 	select {
 	case <-runCtx.Done():
-		return SyncItemResult{
-			Ref:      ref.Raw,
-			InfoHash: ref.InfoHash,
-			Status:   "failed",
-			Message:  "timed out waiting for metadata",
+		path, fallbackErr := fetchTorrentFallback(ctx, store, ref, lanPeers)
+		if fallbackErr != nil {
+			return SyncItemResult{
+				Ref:      ref.Raw,
+				InfoHash: ref.InfoHash,
+				Status:   "failed",
+				Message:  "timed out waiting for metadata; torrent fallback failed: " + fallbackErr.Error(),
+			}
+		}
+		t, err = client.AddTorrentFromFile(path)
+		if err != nil {
+			return SyncItemResult{
+				Ref:      ref.Raw,
+				InfoHash: ref.InfoHash,
+				Status:   "failed",
+				Message:  fmt.Sprintf("load fallback torrent file: %v", err),
+			}
 		}
 	case <-t.GotInfo():
 	}
