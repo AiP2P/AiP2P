@@ -71,6 +71,9 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	if err := ensureLANPeer(opts.NetPath, defaultLANPeer); err != nil {
 		return fmt.Errorf("ensure lan peer: %w", err)
 	}
+	if err := ensureLANTorrentPeer(opts.NetPath, defaultLANPeer); err != nil {
+		return fmt.Errorf("ensure lan bt peer: %w", err)
+	}
 	netCfg, err := LoadNetworkBootstrapConfig(opts.NetPath)
 	if err != nil {
 		return fmt.Errorf("load network bootstrap config: %w", err)
@@ -78,6 +81,10 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	subscriptions, err := LoadSyncSubscriptions(opts.SubscriptionsPath)
 	if err != nil {
 		return fmt.Errorf("load subscriptions: %w", err)
+	}
+	dhtRouters, err := resolveEffectiveDHTRouters(ctx, netCfg)
+	if err != nil && logf != nil {
+		logf("resolve LAN BT/DHT peers: %v", err)
 	}
 
 	cfg := torrent.NewDefaultClientConfig()
@@ -87,19 +94,24 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 	cfg.DisableAcceptRateLimiting = true
 	cfg.DhtStartingNodes = func(network string) anacrolixdht.StartingNodesGetter {
 		return func() ([]anacrolixdht.Addr, error) {
-			return resolveDHTRouters(network, netCfg.DHTRouters)
+			return resolveDHTRouters(network, dhtRouters)
 		}
 	}
 	if strings.TrimSpace(opts.ListenAddr) != "" {
 		cfg.SetListenAddr(opts.ListenAddr)
+	} else if strings.TrimSpace(netCfg.BitTorrentListen) != "" {
+		cfg.SetListenAddr(normalizeBitTorrentListen(netCfg.BitTorrentListen))
 	}
 	client, err := torrent.NewClient(cfg)
 	if err != nil {
 		return fmt.Errorf("create torrent client: %w", err)
 	}
 	defer client.Close()
-	if err := bootstrapTorrentDHT(client, netCfg.DHTRouters); err != nil && logf != nil {
+	if err := bootstrapTorrentDHT(client, dhtRouters); err != nil && logf != nil {
 		logf("bootstrap torrent dht: %v", err)
+	}
+	if len(dhtRouters) > 0 {
+		client.AddDhtNodes(dhtRouters)
 	}
 
 	libp2pRuntime, err := startLibP2PRuntime(ctx, netCfg)
@@ -133,7 +145,7 @@ func RunSync(ctx context.Context, opts SyncOptions, logf func(string, ...any)) e
 		logf("sync queue: %s", queuePath)
 		if netCfg.Exists {
 			logf("network bootstrap file: %s", netCfg.FileName())
-			logf("configured DHT routers: %d", len(netCfg.DHTRouters))
+			logf("configured DHT routers: %d", len(dhtRouters))
 			logf("configured libp2p peers: %d", len(netCfg.LibP2PBootstrap))
 			logf("configured libp2p rendezvous namespaces: %d", len(netCfg.LibP2PRendezvous))
 		} else if strings.TrimSpace(opts.NetPath) != "" {
@@ -243,7 +255,7 @@ func (r *syncRuntime) writeStatus(ctx context.Context) error {
 		SyncActivity: activity,
 	}
 	status.LibP2P = r.libp2p.Status(ctx)
-	status.BitTorrentDHT = torrentStatus(r.torrentClient, len(r.netCfg.DHTRouters))
+	status.BitTorrentDHT = torrentStatus(r.torrentClient, effectiveDHTRouterCount(r.netCfg))
 	status.PubSub = r.pubsub.Status()
 	return writeSyncStatus(r.store, status)
 }
@@ -496,6 +508,21 @@ func torrentStatus(client *torrent.Client, configuredRouters int) SyncBitTorrent
 	return status
 }
 
+func normalizeBitTorrentListen(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	host, port, err := net.SplitHostPort(value)
+	if err != nil {
+		return value
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		return ":" + port
+	}
+	return value
+}
+
 func enqueueSyncRef(queuePath string, ref SyncRef) (bool, error) {
 	if strings.TrimSpace(queuePath) == "" {
 		return false, errors.New("queue path is required")
@@ -694,6 +721,37 @@ func syncMode(once bool) string {
 		return "once"
 	}
 	return "daemon"
+}
+
+func resolveEffectiveDHTRouters(ctx context.Context, cfg NetworkBootstrapConfig) ([]string, error) {
+	merged := append([]string(nil), cfg.DHTRouters...)
+	lanRouters, err := resolveLANTorrentRouters(ctx, cfg)
+	if len(lanRouters) > 0 {
+		seen := make(map[string]struct{}, len(merged))
+		for _, value := range merged {
+			seen[strings.TrimSpace(value)] = struct{}{}
+		}
+		for _, value := range lanRouters {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			merged = append(merged, value)
+		}
+	}
+	return merged, err
+}
+
+func effectiveDHTRouterCount(cfg NetworkBootstrapConfig) int {
+	count := len(cfg.DHTRouters)
+	if len(cfg.LANTorrentPeers) > 0 {
+		count += len(cfg.LANTorrentPeers)
+	}
+	return count
 }
 
 func resolveDHTRouters(network string, routers []string) ([]anacrolixdht.Addr, error) {

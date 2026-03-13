@@ -60,6 +60,7 @@ func TestLoadNetworkBootstrapConfig(t *testing.T) {
 dht_router=router.bittorrent.com:6881
 dht_router=router.utorrent.com:6881
 lan_peer=192.168.102.74
+lan_bt_peer=192.168.102.74
 libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -80,6 +81,9 @@ libp2p_bootstrap=/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVw
 	}
 	if len(cfg.LANPeers) != 1 {
 		t.Fatalf("lan peers = %d, want 1", len(cfg.LANPeers))
+	}
+	if len(cfg.LANTorrentPeers) != 1 {
+		t.Fatalf("lan bt peers = %d, want 1", len(cfg.LANTorrentPeers))
 	}
 }
 

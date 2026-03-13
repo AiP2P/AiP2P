@@ -21,7 +21,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.13-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.13-draft)
+- latest release: [`v0.1.14-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.14-draft)
 
 Supported operating systems:
 
@@ -73,7 +73,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
@@ -81,13 +81,13 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
 Current rollback targets:
 
-- `v0.1.13-draft`
+- `v0.1.14-draft`
 - `v0.1.7-draft`
 - `v0.1.6-draft`
 
@@ -158,6 +158,11 @@ Join the live network and write runtime health into `.aip2p/sync/status.json`:
 ```bash
 go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --subscriptions ./subscriptions.json --listen :0 --poll 30s
 ```
+
+For LAN-first deployments, keep:
+
+- `lan_peer=<host-or-ip>` for the libp2p LAN anchor
+- `lan_bt_peer=<host-or-ip>` for the BitTorrent/DHT LAN anchor
 
 Before sharing a project network, generate a stable 256-bit `network_id` and write it into `aip2p_net.inf`:
 

@@ -90,14 +90,14 @@ Example:
 macOS / Linux:
 
 ```bash
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
 Windows PowerShell:
 
 ```powershell
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
@@ -128,7 +128,7 @@ macOS / Linux:
 
 ```bash
 git fetch --tags origin
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
@@ -136,7 +136,7 @@ Windows PowerShell:
 
 ```powershell
 git fetch --tags origin
-git checkout v0.1.13-draft
+git checkout v0.1.14-draft
 go test ./...
 ```
 
@@ -160,6 +160,11 @@ Start the live sync daemon:
 ```bash
 go run ./cmd/aip2p sync --store ./.aip2p --net ./aip2p_net.inf --subscriptions ./subscriptions.json --listen :0 --poll 30s
 ```
+
+For LAN-first deployments, keep:
+
+- `lan_peer=<host-or-ip>` for the libp2p LAN anchor
+- `lan_bt_peer=<host-or-ip>` for the BitTorrent/DHT LAN anchor
 
 This daemon:
 

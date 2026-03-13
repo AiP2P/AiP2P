@@ -13,9 +13,10 @@ import (
 )
 
 type lanBootstrapResponse struct {
-	NetworkID string   `json:"network_id"`
-	PeerID    string   `json:"peer_id"`
-	DialAddrs []string `json:"dial_addrs"`
+	NetworkID       string   `json:"network_id"`
+	PeerID          string   `json:"peer_id"`
+	DialAddrs       []string `json:"dial_addrs"`
+	BitTorrentNodes []string `json:"bittorrent_nodes"`
 }
 
 type lanHistoryManifestResponse struct {
@@ -94,6 +95,68 @@ func fetchLANBootstrapPeer(ctx context.Context, value, expectedNetworkID string)
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("lan_peer %q returned no dialable addresses", value)
+	}
+	return out, nil
+}
+
+func resolveLANTorrentRouters(ctx context.Context, cfg NetworkBootstrapConfig) ([]string, error) {
+	out := make([]string, 0, len(cfg.LANTorrentPeers))
+	var errs []string
+	seen := make(map[string]struct{})
+	for _, value := range cfg.LANTorrentPeers {
+		nodes, err := fetchLANTorrentRouters(ctx, value, cfg.NetworkID)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
+		for _, node := range nodes {
+			if _, ok := seen[node]; ok {
+				continue
+			}
+			seen[node] = struct{}{}
+			out = append(out, node)
+		}
+	}
+	if len(errs) > 0 {
+		return out, errors.New(strings.Join(errs, "; "))
+	}
+	return out, nil
+}
+
+func fetchLANTorrentRouters(ctx context.Context, value, expectedNetworkID string) ([]string, error) {
+	endpoint, err := lanBootstrapEndpoint(value)
+	if err != nil {
+		return nil, fmt.Errorf("lan_bt_peer %q: %w", value, err)
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("lan_bt_peer %q request: %w", value, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("lan_bt_peer %q query %s: %w", value, endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lan_bt_peer %q query %s: status %d", value, endpoint, resp.StatusCode)
+	}
+	var payload lanBootstrapResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("lan_bt_peer %q decode bootstrap payload: %w", value, err)
+	}
+	if normalizeNetworkID(expectedNetworkID) != "" && payload.NetworkID != "" && payload.NetworkID != expectedNetworkID {
+		return nil, fmt.Errorf("lan_bt_peer %q reported network_id %s, want %s", value, payload.NetworkID, expectedNetworkID)
+	}
+	out := make([]string, 0, len(payload.BitTorrentNodes))
+	for _, node := range payload.BitTorrentNodes {
+		if node = strings.TrimSpace(node); node != "" {
+			out = append(out, node)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("lan_bt_peer %q returned no bittorrent_nodes", value)
 	}
 	return out, nil
 }
