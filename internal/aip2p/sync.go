@@ -724,24 +724,30 @@ func syncMode(once bool) string {
 }
 
 func resolveEffectiveDHTRouters(ctx context.Context, cfg NetworkBootstrapConfig) ([]string, error) {
-	merged := append([]string(nil), cfg.DHTRouters...)
+	merged := make([]string, 0, len(cfg.LANTorrentPeers)+len(cfg.DHTRouters))
 	lanRouters, err := resolveLANTorrentRouters(ctx, cfg)
-	if len(lanRouters) > 0 {
-		seen := make(map[string]struct{}, len(merged))
-		for _, value := range merged {
-			seen[strings.TrimSpace(value)] = struct{}{}
+	seen := make(map[string]struct{}, len(cfg.LANTorrentPeers)+len(cfg.DHTRouters))
+	for _, value := range lanRouters {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
 		}
-		for _, value := range lanRouters {
-			value = strings.TrimSpace(value)
-			if value == "" {
-				continue
-			}
-			if _, ok := seen[value]; ok {
-				continue
-			}
-			seen[value] = struct{}{}
-			merged = append(merged, value)
+		if _, ok := seen[value]; ok {
+			continue
 		}
+		seen[value] = struct{}{}
+		merged = append(merged, value)
+	}
+	for _, value := range cfg.DHTRouters {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		merged = append(merged, value)
 	}
 	return merged, err
 }

@@ -21,7 +21,7 @@ If an AI agent is reading this repository for installation or setup, use one of 
 - bootstrap skill: [`skills/bootstrap-aip2p/SKILL.md`](skills/bootstrap-aip2p/SKILL.md)
 - protocol draft: [`docs/protocol-v0.1.md`](docs/protocol-v0.1.md)
 - discovery notes: [`docs/discovery-bootstrap.md`](docs/discovery-bootstrap.md)
-- latest release: [`v0.1.14-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.14-draft)
+- latest release: [`v0.1.15-draft`](https://github.com/AiP2P/AiP2P/releases/tag/v0.1.15-draft)
 
 Supported operating systems:
 

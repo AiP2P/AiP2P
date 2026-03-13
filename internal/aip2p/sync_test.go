@@ -1,6 +1,10 @@
 package aip2p
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,6 +166,38 @@ func TestSanitizeSyncQueueFileRemovesDirtyPeerHints(t *testing.T) {
 	}
 	if strings.Contains(text, "100.168.102.74") {
 		t.Fatalf("queue still contains dirty x.pe: %q", text)
+	}
+}
+
+func TestResolveEffectiveDHTRoutersPrefersLANBTAnchors(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/network/bootstrap" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(lanBootstrapResponse{
+			NetworkID:       latestOrgNetworkID,
+			BitTorrentNodes: []string{"192.168.102.74:53396"},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := NetworkBootstrapConfig{
+		NetworkID:       latestOrgNetworkID,
+		LANTorrentPeers: []string{srv.URL},
+		DHTRouters:      []string{"router.bittorrent.com:6881", "router.utorrent.com:6881"},
+	}
+	routers, err := resolveEffectiveDHTRouters(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("resolveEffectiveDHTRouters error = %v", err)
+	}
+	if len(routers) < 3 {
+		t.Fatalf("routers = %v, want LAN node plus public routers", routers)
+	}
+	if routers[0] != "192.168.102.74:53396" {
+		t.Fatalf("first router = %q, want LAN BT node first", routers[0])
 	}
 }
 
